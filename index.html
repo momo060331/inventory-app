@@ -1,0 +1,4764 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>家庭在庫管理 - 家族共有用（Firebase同期）</title>
+    <!-- PWA対応 -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2C7A4D">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="在庫管理">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=M+PLUS+Rounded+1c:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #2C7A4D;
+            --primary-light: #4CAF6F;
+            --primary-dark: #1E5A3A;
+            --secondary: #FF9F4A;
+            --danger: #E74C3C;
+            --warning: #F39C12;
+            --success: #27AE60;
+            --bg-main: #F8F9FA;
+            --bg-card: #FFFFFF;
+            --text-primary: #2C3E50;
+            --text-secondary: #7F8C8D;
+            --border: #E0E0E0;
+            --shadow: rgba(0, 0, 0, 0.08);
+            --shadow-hover: rgba(0, 0, 0, 0.15);
+        }
+
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background: linear-gradient(135deg, #F8F9FA 0%, #E8EAF0 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding-bottom: 80px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 20px;
+            box-shadow: 0 4px 12px var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-subtitle {
+            font-size: 13px;
+            opacity: 0.9;
+            margin-top: 4px;
+            font-weight: 300;
+        }
+
+        .profile-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            margin-top: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .profile-badge:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .sync-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-top: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .sync-status.synced {
+            background: rgba(39, 174, 96, 0.3);
+        }
+
+        .sync-status.syncing {
+            background: rgba(255, 159, 74, 0.3);
+        }
+
+        .sync-status.error {
+            background: rgba(231, 76, 60, 0.3);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .alert-banner {
+            background: linear-gradient(135deg, #FFF5E6 0%, #FFE8CC 100%);
+            border-left: 4px solid var(--warning);
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px var(--shadow);
+            display: none;
+        }
+
+        .alert-banner.show {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        .alert-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .alert-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .category-filter {
+            background: var(--bg-card);
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px var(--shadow);
+        }
+
+        .filter-label {
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .filter-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .filter-select {
+            width: 100%;
+            padding: 10px 14px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: 'Noto Sans JP', sans-serif;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .filter-select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(44, 122, 77, 0.1);
+        }
+
+        .filter-reset {
+            padding: 8px 16px;
+            background: var(--bg-main);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s ease;
+        }
+
+        .filter-reset:hover {
+            background: #E0E0E0;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            overflow-x: auto;
+            padding-bottom: 5px;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: var(--bg-card);
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            transition: all 0.3s ease;
+            white-space: nowrap;
+            box-shadow: 0 2px 6px var(--shadow);
+        }
+
+        .tab:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px var(--shadow-hover);
+        }
+
+        .tab.active {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(44, 122, 77, 0.3);
+        }
+
+        .search-box {
+            background: var(--bg-card);
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px var(--shadow);
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px 20px;
+            border: 2px solid var(--border);
+            border-radius: 25px;
+            font-size: 15px;
+            transition: all 0.3s ease;
+            font-family: 'Noto Sans JP', sans-serif;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(44, 122, 77, 0.1);
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 8px var(--shadow);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px var(--shadow-hover);
+        }
+
+        .card.pinned {
+            border: 2px solid var(--warning);
+        }
+
+        .pin-badge {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: var(--warning);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 12px;
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+            flex: 1;
+            margin-right: 10px;
+        }
+
+        .card-category {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .card-stock {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--primary);
+            white-space: nowrap;
+        }
+
+        .card-stock.low {
+            color: var(--danger);
+        }
+
+        .card-stock.zero {
+            color: var(--text-secondary);
+        }
+
+        .card-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border);
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .info-item strong {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        .alert-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: var(--bg-main);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+
+        .alert-badge.enabled {
+            background: #E8F5E9;
+            color: var(--success);
+        }
+
+        .alert-badge.disabled {
+            background: var(--bg-main);
+            color: var(--text-secondary);
+        }
+
+        .expiry-warning {
+            background: linear-gradient(135deg, #FFF3CD 0%, #FFE69C 100%);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            color: #856404;
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .expiry-critical {
+            background: linear-gradient(135deg, #F8D7DA 0%, #F5C2C7 100%);
+            color: #842029;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Noto Sans JP', sans-serif;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(44, 122, 77, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(44, 122, 77, 0.4);
+        }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border: 2px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #C0392B;
+        }
+
+        .fab-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 99;
+        }
+
+        .fab {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, var(--secondary) 0%, #FF8A1F 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 6px 20px rgba(255, 159, 74, 0.4);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+            font-size: 28px;
+            color: white;
+        }
+
+        .fab:hover {
+            transform: scale(1.1) rotate(90deg);
+            box-shadow: 0 8px 30px rgba(255, 159, 74, 0.6);
+        }
+
+        .fab-menu {
+            position: absolute;
+            bottom: 80px;
+            right: 0;
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            min-width: 200px;
+        }
+
+        .fab-menu.show {
+            display: flex;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .fab-menu-item {
+            background: var(--bg-card);
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px var(--shadow);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+        }
+
+        .fab-menu-item:hover {
+            transform: translateX(-5px);
+            box-shadow: 0 6px 20px var(--shadow-hover);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--bg-card);
+            border-radius: 16px;
+            max-width: 600px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: slideUp 0.3s ease;
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 16px 16px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header.danger {
+            background: linear-gradient(135deg, var(--danger) 0%, #C0392B 100%);
+        }
+
+        .modal-header h2 {
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 28px;
+            cursor: pointer;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        .close-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .form-input,
+        .form-select,
+        .form-textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 15px;
+            transition: all 0.3s ease;
+            font-family: 'Noto Sans JP', sans-serif;
+        }
+
+        .form-input:focus,
+        .form-select:focus,
+        .form-textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(44, 122, 77, 0.1);
+        }
+
+        .form-textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .checkbox-group input[type="checkbox"],
+        .checkbox-group input[type="radio"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .profile-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .profile-item {
+            background: var(--bg-main);
+            padding: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .profile-item:hover {
+            background: #E0E0E0;
+            transform: translateX(5px);
+        }
+
+        .profile-item.active {
+            border-color: var(--primary);
+            background: rgba(44, 122, 77, 0.1);
+        }
+
+        .profile-name {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 6px;
+        }
+
+        .profile-info {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .empty-state-text {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+
+        .shopping-list {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px var(--shadow);
+        }
+
+        .shopping-list h3 {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .shopping-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: var(--bg-main);
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+
+        .shopping-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .camera-view {
+            width: 100%;
+            max-width: 500px;
+            min-height: 300px;
+            background: #000;
+            border-radius: 8px;
+            margin: 20px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .camera-view video {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover;
+        }
+
+        #cameraView > div,
+        #quickCameraView > div,
+        #storeCameraView > div {
+            width: 100% !important;
+        }
+
+        .scan-line {
+            position: absolute;
+            width: 80%;
+            height: 2px;
+            background: var(--secondary);
+            animation: scan 2s ease-in-out infinite;
+            box-shadow: 0 0 10px var(--secondary);
+        }
+
+        @keyframes scan {
+            0%, 100% { top: 20%; }
+            50% { top: 80%; }
+        }
+
+        .batch-edit-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .batch-edit-table th,
+        .batch-edit-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .batch-edit-table th {
+            background: var(--bg-main);
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .batch-edit-table input {
+            width: 100%;
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .notification {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: var(--success);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px var(--shadow);
+            z-index: 2000;
+            animation: slideDown 0.3s ease;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .notification button {
+            background: rgba(255, 255, 255, 0.3);
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s ease;
+        }
+
+        .notification button:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-warning {
+            background: #FFF3CD;
+            color: #856404;
+        }
+
+        .badge-danger {
+            background: #F8D7DA;
+            color: #842029;
+        }
+
+        .badge-success {
+            background: #D1E7DD;
+            color: #0F5132;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .tabs {
+                gap: 5px;
+            }
+
+            .tab {
+                padding: 10px 16px;
+                font-size: 14px;
+            }
+
+            .card-title {
+                font-size: 16px;
+            }
+
+            .fab {
+                width: 56px;
+                height: 56px;
+                font-size: 24px;
+            }
+
+            .filter-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+        <div class="header">
+            <h1>🏠 家庭在庫管理</h1>
+            <div class="header-subtitle">かんたん在庫チェック - 家族共有（Firebase同期）</div>
+            <div id="syncStatus" class="sync-status">⏳ 読込中...</div>
+            <div class="profile-badge" onclick="openProfileSelector()">
+            <span id="currentProfileIcon">👤</span>
+            <span id="currentProfileName">プロファイルを選択</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="alert-banner" id="alertBanner">
+            <!-- アラートがここに表示されます -->
+        </div>
+
+        <!-- カテゴリーフィルター -->
+        <div class="category-filter">
+            <label class="filter-label">📁 カテゴリーで絞り込み</label>
+            <div class="filter-row">
+                <select class="filter-select" id="filterLarge" onchange="updateCategoryFilter()">
+                    <option value="">すべての大カテゴリ</option>
+                </select>
+                <select class="filter-select" id="filterMedium" onchange="updateCategoryFilter()">
+                    <option value="">すべての中カテゴリ</option>
+                </select>
+                <select class="filter-select" id="filterSmall" onchange="updateCategoryFilter()">
+                    <option value="">すべての小カテゴリ</option>
+                </select>
+            </div>
+            <button class="filter-reset" onclick="resetCategoryFilter()">
+                🔄 フィルターをリセット
+            </button>
+        </div>
+
+        <div class="search-box">
+            <input type="text" class="search-input" id="searchInput" placeholder="🔍 商品名、カテゴリ、店舗、メモで検索...">
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="all">すべて</button>
+            <button class="tab" data-tab="recent">最近の登録</button>
+            <button class="tab" data-tab="expiring">期限切れ間近</button>
+            <button class="tab" data-tab="low-stock">在庫少</button>
+            <button class="tab" data-tab="shopping-list">買い物リスト</button>
+        </div>
+
+        <div id="inventoryList">
+            <div class="empty-state">
+                <div class="empty-state-icon">📦</div>
+                <div class="empty-state-text">まだ商品が登録されていません</div>
+                <div style="margin-top: 10px; color: var(--text-secondary); font-size: 14px;">
+                    右下の + ボタンから商品を追加しましょう
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FABメニュー -->
+    <div class="fab-container">
+        <div class="fab-menu" id="fabMenu">
+            <div class="fab-menu-item" onclick="openQuickRegister()">
+                <span>⚡</span> クイック登録
+            </div>
+            <div class="fab-menu-item" onclick="openStoreRegister()">
+                <span>🏪</span> 店舗別登録
+            </div>
+            <div class="fab-menu-item" onclick="openNormalRegister()">
+                <span>➕</span> 新規商品登録
+            </div>
+            <div class="fab-menu-item" onclick="openSettings()">
+                <span>⚙️</span> 設定
+            </div>
+        </div>
+        <button class="fab" id="fabBtn" onclick="toggleFabMenu()">+</button>
+    </div>
+
+    <!-- クイック登録モーダル -->
+    <div class="modal" id="quickModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚡ クイック登録</h2>
+                <button class="close-btn" onclick="closeModal('quickModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="camera-view" id="quickCameraView">
+                    <div class="scan-line"></div>
+                </div>
+                <div style="text-align: center; margin-top: 10px; color: var(--text-secondary); font-size: 14px;">
+                    バーコードをカメラに映してください<br>
+                    既存商品は自動で在庫+1されます
+                </div>
+                <button class="btn btn-secondary" onclick="stopQuickScanner()" style="width: 100%; margin-top: 15px;">
+                    スキャンを終了
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 店舗別登録モーダル -->
+    <div class="modal" id="storeModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="storeModalTitle">🏪 店舗別登録</h2>
+                <button class="close-btn" onclick="closeModal('storeModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="storeSelectSection">
+                    <div class="form-group">
+                        <label class="form-label">購入店を選択</label>
+                        <input type="text" class="form-input" id="batchStore" placeholder="店舗名を入力" list="batchStoreList">
+                        <datalist id="batchStoreList"></datalist>
+                    </div>
+                    <button class="btn btn-primary" onclick="startBatchScanning()" style="width: 100%;">
+                        スキャン開始
+                    </button>
+                </div>
+
+                <div id="batchScanSection" style="display: none;">
+                    <div class="camera-view" id="storeCameraView">
+                        <div class="scan-line"></div>
+                    </div>
+                    <div style="text-align: center; margin-top: 10px; color: var(--text-secondary); font-size: 14px;">
+                        商品をスキャンしてください<br>
+                        スキャン済み: <strong id="scannedCount">0</strong>点
+                    </div>
+                    <div style="display: flex; gap: 10px; margin-top: 15px;">
+                        <button class="btn btn-secondary" onclick="finishBatchScanning()" style="flex: 1;">
+                            スキャン完了
+                        </button>
+                        <button class="btn btn-secondary" onclick="cancelBatchScanning()" style="flex: 1;">
+                            キャンセル
+                        </button>
+                    </div>
+                </div>
+
+                <div id="batchEditSection" style="display: none;">
+                    <!-- バッチ編集テーブルがここに表示されます -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- プロファイル選択モーダル -->
+    <div class="modal" id="profileModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>👤 プロファイル選択</h2>
+                <button class="close-btn" onclick="closeModal('profileModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="profile-list" id="profileList">
+                    <!-- プロファイル一覧がここに表示されます -->
+                </div>
+                <button class="btn btn-primary" onclick="openNewProfile()" style="width: 100%; margin-top: 20px;">
+                    ➕ 新しいプロファイルを作成
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- プロファイル作成/編集モーダル -->
+    <div class="modal" id="profileEditModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="profileEditTitle">👤 プロファイル作成</h2>
+                <button class="close-btn" onclick="closeModal('profileEditModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="profileForm">
+                    <div class="form-group">
+                        <label class="form-label">プロファイル名</label>
+                        <input type="text" class="form-input" id="profileName" placeholder="例: 太郎" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">アイコン</label>
+                        <select class="form-select" id="profileIcon">
+                            <option value="👤">👤 デフォルト</option>
+                            <option value="👨">👨 男性</option>
+                            <option value="👩">👩 女性</option>
+                            <option value="👶">👶 子供</option>
+                            <option value="🏠">🏠 共通</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">表示するカテゴリを選択</label>
+                        <div id="categoryCheckboxes" style="max-height: 300px; overflow-y: auto;">
+                            <!-- カテゴリーチェックボックスがここに表示されます -->
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('profileEditModal')" style="flex: 1;">
+                            キャンセル
+                        </button>
+                        <button type="submit" class="btn btn-primary" style="flex: 2;">
+                            保存
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 設定モーダル -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚙️ 設定</h2>
+                <button class="close-btn" onclick="closeModal('settingsModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="background: #E8F5E9; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #4CAF50;">
+                    <div style="font-weight: 500; margin-bottom: 8px;">📡 家族共有モード</div>
+                    <div style="font-size: 13px; color: var(--text-secondary);">
+                        データはFirebaseで全デバイスと同期されます。<br>
+                        スマホ・PC・タブレットで同じデータが共有されます。<br>
+                        <strong>ユーザーID:</strong> <code style="background: rgba(0,0,0,0.1); padding: 2px 6px; border-radius: 4px; font-size: 11px;">${userId}</code>
+                    </div>
+                </div>
+                
+                <h3 style="margin-bottom: 15px;">プロファイル管理</h3>
+                <button class="btn btn-secondary" onclick="openProfileSelector()" style="width: 100%; margin-bottom: 15px;">
+                    👤 プロファイルを切り替え
+                </button>
+                <button class="btn btn-secondary" onclick="editCurrentProfile()" style="width: 100%; margin-bottom: 30px;">
+                    ✏️ 現在のプロファイルを編集
+                </button>
+
+                <h3 style="margin-bottom: 15px;">カテゴリー管理</h3>
+                <button class="btn btn-secondary" onclick="openCategoryManager()" style="width: 100%; margin-bottom: 10px;">
+                    📁 カテゴリーを編集
+                </button>
+                <button class="btn btn-secondary" onclick="exportCategoriesCSV()" style="width: 100%; margin-bottom: 10px;">
+                    📤 カテゴリをCSVでエクスポート
+                </button>
+                <button class="btn btn-secondary" onclick="importCategoriesCSV()" style="width: 100%; margin-bottom: 10px;">
+                    📥 カテゴリをCSVでインポート
+                </button>
+                <button class="btn btn-secondary" onclick="openQuantityMemoSettings()" style="width: 100%; margin-bottom: 30px;">
+                    📝 数量メモ表示設定
+                </button>
+
+                <h3 style="margin-bottom: 15px;">📤 エクスポート</h3>
+                <button class="btn btn-secondary" onclick="exportCategoriesCSV()" style="width: 100%; margin-bottom: 10px;">
+                    📁 カテゴリCSV
+                </button>
+                <button class="btn btn-secondary" onclick="exportLocationsCSV()" style="width: 100%; margin-bottom: 10px;">
+                    📍 保管場所CSV
+                </button>
+                <button class="btn btn-secondary" onclick="exportStoresCSV()" style="width: 100%; margin-bottom: 10px;">
+                    🏪 店舗CSV
+                </button>
+                <button class="btn btn-secondary" onclick="exportCurrentInventoryCSV()" style="width: 100%; margin-bottom: 10px;">
+                    📦 現在のプロファイルの在庫CSV
+                </button>
+                <button class="btn btn-secondary" onclick="exportAllInventoryCSV()" style="width: 100%; margin-bottom: 10px;">
+                    📊 全在庫CSV（全プロファイル）
+                </button>
+                <button class="btn btn-secondary" onclick="exportData()" style="width: 100%; margin-bottom: 30px;">
+                    💾 全データJSON（完全バックアップ）
+                </button>
+
+                <h3 style="margin-bottom: 15px;">📥 インポート</h3>
+                <button class="btn btn-secondary" onclick="importCategoriesCSV()" style="width: 100%; margin-bottom: 10px;">
+                    📁 カテゴリCSV
+                </button>
+                <button class="btn btn-secondary" onclick="importLocationsCSV()" style="width: 100%; margin-bottom: 10px;">
+                    📍 保管場所CSV
+                </button>
+                <button class="btn btn-secondary" onclick="importStoresCSV()" style="width: 100%; margin-bottom: 10px;">
+                    🏪 店舗CSV
+                </button>
+                <button class="btn btn-secondary" onclick="importInventoryCSV()" style="width: 100%; margin-bottom: 10px;">
+                    📦 在庫CSV（現在のプロファイルに上書き）
+                </button>
+                <button class="btn btn-secondary" onclick="importData()" style="width: 100%; margin-bottom: 30px;">
+                    💾 全データJSON（完全復元）
+                </button>
+
+                <button class="btn btn-secondary" onclick="closeModal('settingsModal')" style="width: 100%;">
+                    閉じる
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 商品登録モーダル -->
+    <div class="modal" id="addModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📦 商品登録</h2>
+                <button class="close-btn" onclick="closeModal('addModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="scannerChoice">
+                    <div class="form-group">
+                        <button class="btn btn-primary" onclick="startNormalScanner()" style="width: 100%; margin-bottom: 15px;">
+                            📷 バーコードをスキャン
+                        </button>
+                        <button class="btn btn-secondary" onclick="skipScanner()" style="width: 100%;">
+                            バーコードなしで登録
+                        </button>
+                    </div>
+                </div>
+
+                <div id="scannerSection" style="display: none;">
+                    <div class="camera-view" id="cameraView"></div>
+                    <div style="text-align: center; margin-top: 10px; color: var(--text-secondary); font-size: 14px;">
+                        バーコードをカメラに映してください
+                    </div>
+                    <button class="btn btn-secondary" onclick="stopNormalScanner()" style="width: 100%; margin-top: 15px;">
+                        スキャンをキャンセル
+                    </button>
+                </div>
+
+                <form id="productForm" style="display: none;">
+                    <div class="form-group">
+                        <label class="form-label">JANコード</label>
+                        <input type="text" class="form-input" id="janCode" readonly>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">商品名（任意）</label>
+                        <input type="text" class="form-input" id="productName" placeholder="商品名を入力（空欄も可）">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">カテゴリ（必須）</label>
+                        <select class="form-select" id="largeCategory" required>
+                            <option value="">大カテゴリを選択</option>
+                        </select>
+
+                        <select class="form-select" id="mediumCategory" style="margin-top: 10px;">
+                            <option value="">中カテゴリを選択（任意）</option>
+                        </select>
+
+                        <select class="form-select" id="smallCategory" style="margin-top: 10px;">
+                            <option value="">小カテゴリを選択（任意）</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">保管場所（任意）</label>
+                        <select class="form-select" id="location">
+                            <option value="">場所を選択</option>
+                        </select>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">個数</label>
+                            <input type="number" class="form-input" id="quantity" min="1" value="1" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">金額（任意）</label>
+                            <input type="number" class="form-input" id="price" min="0" placeholder="円">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">購入店（任意）</label>
+                        <input type="text" class="form-input" id="store" placeholder="購入店を入力">
+                    </div>
+
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="hasExpiry" onchange="toggleExpiry()">
+                            <label for="hasExpiry">賞味期限あり</label>
+                        </div>
+                        <input type="date" class="form-input" id="expiryDate" style="display: none;">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">在庫アラート設定</label>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="alertEnabled" checked>
+                            <label for="alertEnabled">在庫が少なくなったら通知する</label>
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <label class="form-label" style="font-size: 13px;">在庫閾値（この数以下で通知）</label>
+                            <input type="number" class="form-input" id="alertThreshold" min="0" value="1">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="isPinned">
+                            <label for="isPinned">⭐ この商品をお気に入りに追加</label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">メモ（任意）</label>
+                        <textarea class="form-textarea" id="notes" placeholder="購入時のメモなど"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">商品全体のメモ（任意）</label>
+                        <textarea class="form-textarea" id="generalNotes" placeholder="この商品についての全般的なメモ"></textarea>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('addModal')" style="flex: 1;">
+                            キャンセル
+                        </button>
+                        <button type="submit" class="btn btn-primary" style="flex: 2;">
+                            登録
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 商品詳細モーダル -->
+    <div class="modal" id="detailModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="detailTitle">商品詳細</h2>
+                <button class="close-btn" onclick="closeModal('detailModal')">&times;</button>
+            </div>
+            <div class="modal-body" id="detailContent">
+                <!-- 商品詳細がここに表示されます -->
+            </div>
+        </div>
+    </div>
+
+    <!-- カテゴリ変更モーダル -->
+    <div class="modal" id="editCategoryModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📁 カテゴリ変更</h2>
+                <button class="close-btn" onclick="closeModal('editCategoryModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="editCategoryProductInfo" style="background: var(--bg-main); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <!-- 商品情報がここに表示されます -->
+                </div>
+                
+                <form id="editCategoryForm">
+                    <div class="form-group">
+                        <label class="form-label">大カテゴリ（必須）</label>
+                        <select class="form-select" id="editCatLarge" required onchange="updateEditCatMediumOptions()">
+                            <option value="">大カテゴリを選択</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">中カテゴリ（任意）</label>
+                        <select class="form-select" id="editCatMedium" onchange="updateEditCatSmallOptions()">
+                            <option value="">中カテゴリを選択（任意）</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">小カテゴリ（任意）</label>
+                        <select class="form-select" id="editCatSmall">
+                            <option value="">小カテゴリを選択（任意）</option>
+                        </select>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('editCategoryModal')" style="flex: 1;">
+                            キャンセル
+                        </button>
+                        <button type="submit" class="btn btn-primary" style="flex: 2;">
+                            変更を保存
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- カテゴリー管理モーダル -->
+    <div class="modal" id="categoryManagerModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📁 カテゴリー管理</h2>
+                <button class="close-btn" onclick="closeModal('categoryManagerModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">大カテゴリーを追加</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" class="form-input" id="newLargeCategory" placeholder="新しい大カテゴリー名">
+                        <button class="btn btn-primary" onclick="addLargeCategory()" style="white-space: nowrap;">追加</button>
+                    </div>
+                </div>
+
+                <div id="categoryManagerList" style="margin-top: 30px;">
+                    <!-- カテゴリー一覧がここに表示されます -->
+                </div>
+
+                <button class="btn btn-secondary" onclick="closeModal('categoryManagerModal')" style="width: 100%; margin-top: 20px;">
+                    閉じる
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script>
+        // ========================================
+        // Firebase 初期化
+        // ========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyCy0q1fEX4Utch_NiLvxdh96fQIWaXFs-A",
+            authDomain: "home-inventory-6f9b0.firebaseapp.com",
+            projectId: "home-inventory-6f9b0",
+            storageBucket: "home-inventory-6f9b0.firebasestorage.app",
+            messagingSenderId: "547759174138",
+            appId: "1:547759174138:web:95ac043ca6bc6937d73443"
+        };
+
+        // Firebase初期化
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // オフライン対応
+        db.enablePersistence()
+            .catch((err) => {
+                if (err.code == 'failed-precondition') {
+                    console.warn('⚠️ 複数タブが開いています。最初のタブのみがオフライン機能を使用できます。');
+                } else if (err.code == 'unimplemented') {
+                    console.warn('⚠️ このブラウザはオフライン機能に対応していません。');
+                }
+            });
+
+        // ユーザーID管理（デバイス間で同じIDを使用して同期）
+        let userId = localStorage.getItem('inventoryUserId');
+        if (!userId) {
+            // 新規ユーザー：IDを生成
+            userId = 'USER_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('inventoryUserId', userId);
+            console.log('🆕 新しいユーザーIDを作成しました:', userId);
+        } else {
+            console.log('✅ 既存のユーザーIDを使用します:', userId);
+        }
+
+        // グローバル変数
+        let inventory = [];
+        let categories = {
+            large: ['食品', '日用品', '医薬品'],
+            medium: {
+                '食品': ['調味料', 'パウチ', '備蓄', '飲料'],
+                '日用品': ['掃除用品', 'トイレ用品', 'キッチン用品'],
+                '医薬品': ['内服薬', '外用薬', '救急用品']
+            },
+            small: {
+                '調味料': ['塩', '醤油', 'みりん', '酢', '油'],
+                'パウチ': ['カレー', 'シチュー', 'スープ'],
+                '備蓄': ['缶詰', 'レトルト', '乾物'],
+                '掃除用品': ['洗剤', '柔軟剤', '漂白剤'],
+                'トイレ用品': ['トイレットペーパー', '掃除用品']
+            }
+        };
+        let locations = ['キッチン棚A', 'キッチン棚B', '冷蔵庫', 'パントリー', '洗面所下', 'リビング収納'];
+        let stores = [];
+        let profiles = [];
+        let currentProfile = null;
+        let currentTab = 'all';
+        let categoryFilter = { large: '', medium: '', small: '' };
+        let quantityMemoCategories = ['肉', '野菜', '魚', '総菜', '作り置き'];
+
+        // 初期化
+        window.addEventListener('DOMContentLoaded', async () => {
+            await loadData();
+            await initializeApp();
+            
+            // リアルタイム同期リスナーを設定
+            setupRealtimeListener();
+        });
+
+        async function initializeApp() {
+            updateCategorySelects();
+            updateLocationSelect();
+            updateFilterSelects();
+            
+            // プロファイルチェック
+            if (profiles.length === 0) {
+                createDefaultProfile();
+            } else if (!currentProfile) {
+                openProfileSelector();
+            } else {
+                updateProfileDisplay();
+                renderInventory();
+                updateAlerts();
+            }
+
+            document.getElementById('productForm').addEventListener('submit', handleSubmit);
+            document.getElementById('searchInput').addEventListener('input', handleSearch);
+            document.getElementById('profileForm').addEventListener('submit', handleProfileSubmit);
+            
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    currentTab = tab.dataset.tab;
+                    renderInventory();
+                });
+            });
+
+            document.getElementById('largeCategory').addEventListener('change', updateMediumCategories);
+            document.getElementById('mediumCategory').addEventListener('change', updateSmallCategories);
+        }
+
+        async function loadData() {
+            try {
+                updateSyncStatus('loading');
+                
+                const docRef = db.collection('inventory').doc(userId);
+                const doc = await docRef.get();
+                
+                if (doc.exists) {
+                    const data = doc.data();
+                    inventory = data.inventory || [];
+                    categories = data.categories || categories;
+                    locations = data.locations || locations;
+                    stores = data.stores || [];
+                    profiles = data.profiles || [];
+                    currentProfile = data.currentProfile || null;
+                    quantityMemoCategories = data.quantityMemoCategories || quantityMemoCategories;
+                    
+                    updateSyncStatus('synced');
+                    console.log('✅ Firebaseからデータを読み込みました');
+                } else {
+                    console.log('📝 新規ユーザーです。データを初期化します。');
+                    
+                    // localStorageからの移行を試みる
+                    const localData = localStorage.getItem('inventoryDataV2');
+                    if (localData) {
+                        const data = JSON.parse(localData);
+                        inventory = data.inventory || [];
+                        categories = data.categories || categories;
+                        locations = data.locations || locations;
+                        stores = data.stores || [];
+                        profiles = data.profiles || [];
+                        currentProfile = data.currentProfile || null;
+                        quantityMemoCategories = data.quantityMemoCategories || quantityMemoCategories;
+                        
+                        // Firebaseに保存
+                        await saveData();
+                        console.log('✅ localStorageのデータをFirebaseに移行しました');
+                        showNotification('📤 ローカルデータをFirebaseに移行しました');
+                    }
+                    updateSyncStatus('synced');
+                }
+            } catch (error) {
+                console.error('❌ Firebase読み込みエラー:', error);
+                updateSyncStatus('error');
+                
+                // エラー時はlocalStorageから読み込み
+                const localData = localStorage.getItem('inventoryDataV2');
+                if (localData) {
+                    const data = JSON.parse(localData);
+                    inventory = data.inventory || [];
+                    categories = data.categories || categories;
+                    locations = data.locations || locations;
+                    stores = data.stores || [];
+                    profiles = data.profiles || [];
+                    currentProfile = data.currentProfile || null;
+                    quantityMemoCategories = data.quantityMemoCategories || quantityMemoCategories;
+                    console.log('⚠️ オフラインモード: localStorageから読み込みました');
+                }
+            }
+        }
+
+        async function saveData() {
+            const data = {
+                inventory,
+                categories,
+                locations,
+                stores,
+                profiles,
+                currentProfile,
+                quantityMemoCategories,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            
+            try {
+                updateSyncStatus('syncing');
+                
+                // Firebaseに保存
+                await db.collection('inventory').doc(userId).set(data);
+                
+                // バックアップとしてlocalStorageにも保存
+                localStorage.setItem('inventoryDataV2', JSON.stringify(data));
+                
+                updateSyncStatus('synced');
+                console.log('✅ Firebaseに保存しました');
+            } catch (error) {
+                console.error('❌ Firebase保存エラー:', error);
+                updateSyncStatus('error');
+                
+                // エラー時はlocalStorageのみに保存
+                localStorage.setItem('inventoryDataV2', JSON.stringify(data));
+                showNotification('⚠️ オフラインモードで保存しました', 'warning');
+            }
+        }
+
+        function createDefaultProfile() {
+            const defaultProfile = {
+                id: 'PROF_' + Date.now(),
+                name: '共通',
+                icon: '🏠',
+                visibleCategories: {
+                    large: categories.large.slice(),
+                    medium: Object.keys(categories.medium).reduce((acc, key) => {
+                        acc[key] = categories.medium[key].slice();
+                        return acc;
+                    }, {}),
+                    small: Object.keys(categories.small).reduce((acc, key) => {
+                        acc[key] = categories.small[key].slice();
+                        return acc;
+                    }, {})
+                },
+                createdAt: new Date().toISOString()
+            };
+            profiles.push(defaultProfile);
+            currentProfile = defaultProfile.id;
+            saveData();
+            updateProfileDisplay();
+        }
+
+        function openProfileSelector() {
+            const list = document.getElementById('profileList');
+            list.innerHTML = profiles.map(profile => `
+                <div class="profile-item ${profile.id === currentProfile ? 'active' : ''}" onclick="selectProfile('${profile.id}')">
+                    <div class="profile-name">
+                        <span>${profile.icon}</span> ${profile.name}
+                    </div>
+                    <div class="profile-info">
+                        作成日: ${new Date(profile.createdAt).toLocaleDateString('ja-JP')}
+                    </div>
+                </div>
+            `).join('');
+            
+            closeAllModals();
+            openModal('profileModal');
+        }
+
+        function selectProfile(profileId) {
+            currentProfile = profileId;
+            saveData();
+            updateProfileDisplay();
+            resetCategoryFilter();
+            renderInventory();
+            updateAlerts();
+            closeModal('profileModal');
+        }
+
+        function updateProfileDisplay() {
+            const profile = profiles.find(p => p.id === currentProfile);
+            if (profile) {
+                document.getElementById('currentProfileIcon').textContent = profile.icon;
+                document.getElementById('currentProfileName').textContent = profile.name;
+            }
+        }
+
+        function openNewProfile() {
+            closeModal('profileModal');
+            document.getElementById('profileEditTitle').textContent = '👤 プロファイル作成';
+            document.getElementById('profileForm').reset();
+            document.getElementById('profileForm').dataset.mode = 'new';
+            renderCategoryCheckboxes();
+            openModal('profileEditModal');
+        }
+
+        function editCurrentProfile() {
+            const profile = profiles.find(p => p.id === currentProfile);
+            if (!profile) return;
+
+            closeModal('settingsModal');
+            document.getElementById('profileEditTitle').textContent = '👤 プロファイル編集';
+            document.getElementById('profileName').value = profile.name;
+            document.getElementById('profileIcon').value = profile.icon;
+            document.getElementById('profileForm').dataset.mode = 'edit';
+            document.getElementById('profileForm').dataset.profileId = profile.id;
+            renderCategoryCheckboxes(profile);
+            openModal('profileEditModal');
+        }
+
+        function renderCategoryCheckboxes(profile = null) {
+            const container = document.getElementById('categoryCheckboxes');
+            let html = '';
+
+            // 大カテゴリごとにグループ化
+            categories.large.forEach(large => {
+                const isLargeVisible = !profile || (profile.visibleCategories.large.includes(large));
+                
+                html += `
+                    <div style="margin-bottom: 20px; padding: 15px; background: var(--bg-main); border-radius: 8px;">
+                        <div class="checkbox-group" style="margin: 0 0 10px 0;">
+                            <input type="checkbox" id="cat_large_${large}" ${isLargeVisible ? 'checked' : ''} onchange="toggleLargeCategory('${large}')">
+                            <label for="cat_large_${large}" style="font-weight: 500;">${large}</label>
+                        </div>
+                `;
+
+                // 中カテゴリ
+                if (categories.medium[large]) {
+                    categories.medium[large].forEach(medium => {
+                        const isMediumVisible = !profile || (profile.visibleCategories.medium[large] && profile.visibleCategories.medium[large].includes(medium));
+                        
+                        html += `
+                            <div style="margin-left: 30px; margin-bottom: 8px;">
+                                <div class="checkbox-group" style="margin: 0;">
+                                    <input type="checkbox" id="cat_medium_${large}_${medium}" class="medium-cat medium-cat-${large}" ${isMediumVisible ? 'checked' : ''}>
+                                    <label for="cat_medium_${large}_${medium}" style="font-size: 14px;">${medium}</label>
+                                </div>
+                            </div>
+                        `;
+
+                        // 小カテゴリ
+                        if (categories.small[medium]) {
+                            categories.small[medium].forEach(small => {
+                                const isSmallVisible = !profile || (profile.visibleCategories.small[medium] && profile.visibleCategories.small[medium].includes(small));
+                                
+                                html += `
+                                    <div style="margin-left: 60px; margin-bottom: 6px;">
+                                        <div class="checkbox-group" style="margin: 0;">
+                                            <input type="checkbox" id="cat_small_${medium}_${small}" class="small-cat small-cat-${medium}" ${isSmallVisible ? 'checked' : ''}>
+                                            <label for="cat_small_${medium}_${small}" style="font-size: 13px;">${small}</label>
+                                        </div>
+                                    </div>
+                                `;
+                            });
+                        }
+                    });
+                }
+
+                html += `</div>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function toggleLargeCategory(large) {
+            const isChecked = document.getElementById(`cat_large_${large}`).checked;
+            // 中カテゴリも連動
+            document.querySelectorAll(`.medium-cat-${large}`).forEach(cb => {
+                cb.checked = isChecked;
+            });
+            // 小カテゴリも連動
+            if (categories.medium[large]) {
+                categories.medium[large].forEach(medium => {
+                    document.querySelectorAll(`.small-cat-${medium}`).forEach(cb => {
+                        cb.checked = isChecked;
+                    });
+                });
+            }
+        }
+
+        function handleProfileSubmit(e) {
+            e.preventDefault();
+            
+            const mode = e.target.dataset.mode;
+            const name = document.getElementById('profileName').value;
+            const icon = document.getElementById('profileIcon').value;
+
+            // 選択されたカテゴリを収集
+            const visibleCategories = {
+                large: [],
+                medium: {},
+                small: {}
+            };
+
+            categories.large.forEach(large => {
+                if (document.getElementById(`cat_large_${large}`).checked) {
+                    visibleCategories.large.push(large);
+                    
+                    if (categories.medium[large]) {
+                        visibleCategories.medium[large] = [];
+                        categories.medium[large].forEach(medium => {
+                            if (document.getElementById(`cat_medium_${large}_${medium}`).checked) {
+                                visibleCategories.medium[large].push(medium);
+                                
+                                if (categories.small[medium]) {
+                                    visibleCategories.small[medium] = [];
+                                    categories.small[medium].forEach(small => {
+                                        if (document.getElementById(`cat_small_${medium}_${small}`).checked) {
+                                            visibleCategories.small[medium].push(small);
+                                        }
+                                    });
+                                }
+                            }
+                        });
+                    }
+                }
+            });
+
+            if (mode === 'new') {
+                const newProfile = {
+                    id: 'PROF_' + Date.now(),
+                    name,
+                    icon,
+                    visibleCategories,
+                    createdAt: new Date().toISOString()
+                };
+                profiles.push(newProfile);
+                currentProfile = newProfile.id;
+            } else {
+                const profileId = e.target.dataset.profileId;
+                const profile = profiles.find(p => p.id === profileId);
+                if (profile) {
+                    profile.name = name;
+                    profile.icon = icon;
+                    profile.visibleCategories = visibleCategories;
+                }
+            }
+
+            saveData();
+            updateProfileDisplay();
+            resetCategoryFilter();
+            renderInventory();
+            closeModal('profileEditModal');
+            showNotification(mode === 'new' ? '✅ プロファイルを作成しました' : '✅ プロファイルを更新しました');
+        }
+
+        function getCurrentProfile() {
+            return profiles.find(p => p.id === currentProfile);
+        }
+
+        function isProductVisible(product) {
+            const profile = getCurrentProfile();
+            if (!profile) return true;
+
+            const vis = profile.visibleCategories;
+            
+            // 大カテゴリチェック
+            if (!vis.large.includes(product.category.large)) {
+                return false;
+            }
+
+            // 中カテゴリチェック
+            if (product.category.medium) {
+                if (!vis.medium[product.category.large] || 
+                    !vis.medium[product.category.large].includes(product.category.medium)) {
+                    return false;
+                }
+
+                // 小カテゴリチェック
+                if (product.category.small) {
+                    if (!vis.small[product.category.medium] || 
+                        !vis.small[product.category.medium].includes(product.category.small)) {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        function updateFilterSelects() {
+            const profile = getCurrentProfile();
+            if (!profile) return;
+
+            // 大カテゴリフィルター
+            const largeSelect = document.getElementById('filterLarge');
+            largeSelect.innerHTML = '<option value="">すべての大カテゴリ</option>';
+            profile.visibleCategories.large.forEach(cat => {
+                largeSelect.innerHTML += `<option value="${cat}">${cat}</option>`;
+            });
+
+            updateMediumFilterOptions();
+        }
+
+        function updateMediumFilterOptions() {
+            const profile = getCurrentProfile();
+            if (!profile) return;
+
+            const large = categoryFilter.large;
+            const mediumSelect = document.getElementById('filterMedium');
+            const smallSelect = document.getElementById('filterSmall');
+            
+            mediumSelect.innerHTML = '<option value="">すべての中カテゴリ</option>';
+            smallSelect.innerHTML = '<option value="">すべての小カテゴリ</option>';
+
+            if (large && profile.visibleCategories.medium[large]) {
+                profile.visibleCategories.medium[large].forEach(cat => {
+                    mediumSelect.innerHTML += `<option value="${cat}">${cat}</option>`;
+                });
+            }
+        }
+
+        function updateSmallFilterOptions() {
+            const profile = getCurrentProfile();
+            if (!profile) return;
+
+            const medium = categoryFilter.medium;
+            const smallSelect = document.getElementById('filterSmall');
+            
+            smallSelect.innerHTML = '<option value="">すべての小カテゴリ</option>';
+
+            if (medium && profile.visibleCategories.small[medium]) {
+                profile.visibleCategories.small[medium].forEach(cat => {
+                    smallSelect.innerHTML += `<option value="${cat}">${cat}</option>`;
+                });
+            }
+        }
+
+        function updateCategoryFilter() {
+            categoryFilter.large = document.getElementById('filterLarge').value;
+            categoryFilter.medium = document.getElementById('filterMedium').value;
+            categoryFilter.small = document.getElementById('filterSmall').value;
+
+            if (categoryFilter.large) {
+                updateMediumFilterOptions();
+                if (categoryFilter.medium) {
+                    updateSmallFilterOptions();
+                }
+            }
+
+            renderInventory();
+        }
+
+        function resetCategoryFilter() {
+            categoryFilter = { large: '', medium: '', small: '' };
+            document.getElementById('filterLarge').value = '';
+            document.getElementById('filterMedium').value = '';
+            document.getElementById('filterSmall').value = '';
+            updateMediumFilterOptions();
+            updateSmallFilterOptions();
+            renderInventory();
+        }
+
+        function matchesCategoryFilter(product) {
+            if (categoryFilter.large && product.category.large !== categoryFilter.large) {
+                return false;
+            }
+            if (categoryFilter.medium && product.category.medium !== categoryFilter.medium) {
+                return false;
+            }
+            if (categoryFilter.small && product.category.small !== categoryFilter.small) {
+                return false;
+            }
+            return true;
+        }
+
+        function toggleFabMenu() {
+            const menu = document.getElementById('fabMenu');
+            menu.classList.toggle('show');
+        }
+
+        let scanner = null;
+        let batchScannedItems = [];
+
+        function openQuickRegister() {
+            toggleFabMenu();
+            openModal('quickModal');
+            startQuickScanner();
+        }
+
+        function openNormalRegister() {
+            toggleFabMenu();
+            openModal('addModal');
+            document.getElementById('productForm').reset();
+            document.getElementById('productForm').style.display = 'none';
+            document.getElementById('scannerSection').style.display = 'none';
+            document.getElementById('scannerChoice').style.display = 'block';
+            document.getElementById('alertEnabled').checked = true;
+            document.getElementById('alertThreshold').value = 1;
+        }
+
+        // クイック登録スキャナー
+        async function startQuickScanner() {
+            try {
+                const devices = await Html5Qrcode.getCameras();
+                if (devices && devices.length > 0) {
+                    let cameraId = devices[devices.length - 1].id;
+                    scanner = new Html5Qrcode("quickCameraView");
+                    await scanner.start(
+                        cameraId,
+                        { fps: 10, qrbox: { width: 250, height: 250 } },
+                        onQuickScanSuccess,
+                        () => {}
+                    );
+                }
+            } catch (err) {
+                console.error('カメラエラー:', err);
+                alert('カメラの起動に失敗しました。');
+                closeModal('quickModal');
+            }
+        }
+
+        function stopQuickScanner() {
+            if (scanner) {
+                scanner.stop();
+                scanner = null;
+            }
+            closeModal('quickModal');
+        }
+
+        async function onQuickScanSuccess(decodedText) {
+            const existingProduct = inventory.find(p => p.janCode === decodedText);
+            
+            if (existingProduct) {
+                // 既存商品：前回の情報を完全に引き継いで在庫+1
+                const lastStock = existingProduct.stocks[existingProduct.stocks.length - 1];
+                const newStock = {
+                    id: 'STK_' + Date.now(),
+                    quantity: 1,
+                    purchaseDate: new Date().toISOString().split('T')[0],
+                    price: lastStock.price || null,
+                    store: lastStock.store || '',
+                    expiryDate: null,
+                    notes: lastStock.notes || '',
+                    quickRegistered: true
+                };
+                
+                existingProduct.stocks.push(newStock);
+                existingProduct.updatedAt = new Date().toISOString();
+                updatePriceStats(existingProduct);
+                
+                saveData();
+                renderInventory();
+                updateAlerts();
+                
+                showQuickNotification(`✅ ${getDisplayName(existingProduct)} を登録しました`, newStock.id);
+            } else {
+                // 新規商品：通常登録フローへ
+                stopQuickScanner();
+                openNormalRegister();
+                document.getElementById('janCode').value = decodedText;
+                document.getElementById('scannerChoice').style.display = 'none';
+                document.getElementById('productForm').style.display = 'block';
+            }
+        }
+
+        function showQuickNotification(message, stockId) {
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.innerHTML = `
+                <span>${message}</span>
+                <button onclick="editQuickStock('${stockId}')">編集</button>
+            `;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.animation = 'fadeOut 0.3s ease';
+                setTimeout(() => notification.remove(), 300);
+            }, 5000);
+        }
+
+        function editQuickStock(stockId) {
+            // 該当する商品と在庫を探す
+            for (let product of inventory) {
+                const stock = product.stocks.find(s => s.id === stockId);
+                if (stock) {
+                    showDetail(product.id);
+                    break;
+                }
+            }
+        }
+
+        // 店舗別登録
+        function openStoreRegister() {
+            toggleFabMenu();
+            openModal('storeModal');
+            updateBatchStoreList();
+        }
+
+        function updateBatchStoreList() {
+            const datalist = document.getElementById('batchStoreList');
+            datalist.innerHTML = '';
+            stores.forEach(store => {
+                datalist.innerHTML += `<option value="${store}">`;
+            });
+        }
+
+        async function startBatchScanning() {
+            const storeName = document.getElementById('batchStore').value.trim();
+            if (!storeName) {
+                alert('店舗名を入力してください');
+                return;
+            }
+
+            if (!stores.includes(storeName)) {
+                stores.push(storeName);
+                saveData();
+            }
+
+            batchScannedItems = [];
+            document.getElementById('storeSelectSection').style.display = 'none';
+            document.getElementById('batchScanSection').style.display = 'block';
+            document.getElementById('storeModalTitle').textContent = `🏪 ${storeName}`;
+            document.getElementById('scannedCount').textContent = '0';
+
+            try {
+                const devices = await Html5Qrcode.getCameras();
+                if (devices && devices.length > 0) {
+                    let cameraId = devices[devices.length - 1].id;
+                    scanner = new Html5Qrcode("storeCameraView");
+                    await scanner.start(
+                        cameraId,
+                        { fps: 10, qrbox: { width: 250, height: 250 } },
+                        onBatchScanSuccess,
+                        () => {}
+                    );
+                }
+            } catch (err) {
+                console.error('カメラエラー:', err);
+                alert('カメラの起動に失敗しました。');
+                cancelBatchScanning();
+            }
+        }
+
+        function onBatchScanSuccess(decodedText) {
+            const existingProduct = inventory.find(p => p.janCode === decodedText);
+            const alreadyScanned = batchScannedItems.find(item => item.janCode === decodedText);
+
+            if (alreadyScanned) {
+                alreadyScanned.quantity++;
+            } else {
+                batchScannedItems.push({
+                    janCode: decodedText,
+                    productName: existingProduct ? existingProduct.productName : '',
+                    category: existingProduct ? existingProduct.category : null,
+                    quantity: 1,
+                    price: existingProduct && existingProduct.stocks.length > 0 ? 
+                           existingProduct.stocks[existingProduct.stocks.length - 1].price : null,
+                    notes: existingProduct && existingProduct.stocks.length > 0 ? 
+                           existingProduct.stocks[existingProduct.stocks.length - 1].notes : '',
+                    isNew: !existingProduct
+                });
+            }
+
+            document.getElementById('scannedCount').textContent = batchScannedItems.length;
+        }
+
+        function finishBatchScanning() {
+            if (scanner) {
+                scanner.stop();
+                scanner = null;
+            }
+
+            if (batchScannedItems.length === 0) {
+                alert('商品がスキャンされていません');
+                return;
+            }
+
+            showBatchEditScreen();
+        }
+
+        function cancelBatchScanning() {
+            if (scanner) {
+                scanner.stop();
+                scanner = null;
+            }
+            document.getElementById('storeSelectSection').style.display = 'block';
+            document.getElementById('batchScanSection').style.display = 'none';
+            batchScannedItems = [];
+        }
+
+        function showBatchEditScreen() {
+            document.getElementById('batchScanSection').style.display = 'none';
+            const editSection = document.getElementById('batchEditSection');
+            editSection.style.display = 'block';
+
+            const storeName = document.getElementById('batchStore').value;
+
+            let html = `
+                <h3 style="margin-bottom: 15px;">商品情報を入力</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 14px;">
+                    数量が2個以上の場合、合計金額または単価を入力してください
+                </p>
+                <table class="batch-edit-table">
+                    <thead>
+                        <tr>
+                            <th>商品名</th>
+                            <th>数量</th>
+                            <th>金額入力</th>
+                            <th>メモ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            batchScannedItems.forEach((item, index) => {
+                const displayName = item.productName || `JAN: ${item.janCode}`;
+                const defaultTotal = item.price ? (item.price * item.quantity) : '';
+                const defaultUnit = item.price || '';
+                const defaultNotes = item.notes || '';
+                
+                html += `
+                    <tr>
+                        <td>
+                            ${displayName}
+                            ${item.isNew ? '<span class="badge badge-warning">新規</span>' : ''}
+                        </td>
+                        <td>${item.quantity}個</td>
+                        <td>
+                            <label style="font-size: 12px;">合計:</label>
+                            <input type="number" id="total_${index}" placeholder="円" value="${defaultTotal}" onchange="calculatePrice(${index}, 'total')">
+                            <label style="font-size: 12px; margin-top: 5px;">単価:</label>
+                            <input type="number" id="unit_${index}" placeholder="円" value="${defaultUnit}" onchange="calculatePrice(${index}, 'unit')">
+                        </td>
+                        <td>
+                            <input type="text" id="notes_${index}" placeholder="メモ" value="${defaultNotes}">
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button class="btn btn-secondary" onclick="cancelBatchEdit()" style="flex: 1;">
+                        キャンセル
+                    </button>
+                    <button class="btn btn-primary" onclick="saveBatchRegistration()" style="flex: 2;">
+                        一括登録
+                    </button>
+                </div>
+            `;
+
+            editSection.innerHTML = html;
+        }
+
+        function calculatePrice(index, type) {
+            const item = batchScannedItems[index];
+            const totalInput = document.getElementById(`total_${index}`);
+            const unitInput = document.getElementById(`unit_${index}`);
+
+            if (type === 'total') {
+                const total = parseFloat(totalInput.value);
+                if (!isNaN(total)) {
+                    const unit = total / item.quantity;
+                    unitInput.value = Math.round(unit);
+                    item.price = Math.round(unit);
+                }
+            } else {
+                const unit = parseFloat(unitInput.value);
+                if (!isNaN(unit)) {
+                    const total = unit * item.quantity;
+                    totalInput.value = Math.round(total);
+                    item.price = unit;
+                }
+            }
+        }
+
+        function cancelBatchEdit() {
+            document.getElementById('batchEditSection').style.display = 'none';
+            document.getElementById('storeSelectSection').style.display = 'block';
+            batchScannedItems = [];
+        }
+
+        function saveBatchRegistration() {
+            const storeName = document.getElementById('batchStore').value;
+            const purchaseDate = new Date().toISOString().split('T')[0];
+
+            batchScannedItems.forEach((item, index) => {
+                const notes = document.getElementById(`notes_${index}`).value;
+                item.notes = notes;
+
+                const stock = {
+                    id: 'STK_' + Date.now() + '_' + index,
+                    quantity: item.quantity,
+                    purchaseDate: purchaseDate,
+                    price: item.price,
+                    store: storeName,
+                    expiryDate: null,
+                    notes: notes
+                };
+
+                let product = inventory.find(p => p.janCode === item.janCode && item.janCode);
+
+                if (product) {
+                    // 既存商品：前回の情報を引き継ぎつつ更新
+                    product.stocks.push(stock);
+                    product.updatedAt = new Date().toISOString();
+                    updatePriceStats(product);
+                } else if (item.isNew && item.category) {
+                    // 新規商品（カテゴリ情報がある場合のみ）
+                    product = {
+                        id: 'PROD_' + Date.now() + '_' + index,
+                        janCode: item.janCode || null,
+                        productName: item.productName || '',
+                        category: item.category,
+                        location: '',
+                        generalNotes: '',
+                        stocks: [stock],
+                        purchaseHistory: [],
+                        priceStats: {},
+                        storeHistory: {},
+                        alerts: {
+                            stockEnabled: true,
+                            stockThreshold: 1,
+                            expiryEnabled: false,
+                            expiryDays: 30
+                        },
+                        isPinned: false,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    };
+                    updatePriceStats(product);
+                    inventory.push(product);
+                }
+            });
+
+            saveData();
+            renderInventory();
+            updateAlerts();
+            closeModal('storeModal');
+            
+            showNotification(`✅ ${batchScannedItems.length}点を登録しました`);
+            
+            // リセット
+            document.getElementById('batchEditSection').style.display = 'none';
+            document.getElementById('storeSelectSection').style.display = 'block';
+            batchScannedItems = [];
+        }
+
+        // 通常登録スキャナー
+        async function startNormalScanner() {
+            document.getElementById('scannerChoice').style.display = 'none';
+            document.getElementById('scannerSection').style.display = 'block';
+            
+            try {
+                const devices = await Html5Qrcode.getCameras();
+                if (devices && devices.length > 0) {
+                    let cameraId = devices[devices.length - 1].id;
+                    scanner = new Html5Qrcode("cameraView");
+                    await scanner.start(
+                        cameraId,
+                        { fps: 10, qrbox: { width: 250, height: 250 } },
+                        onNormalScanSuccess,
+                        () => {}
+                    );
+                }
+            } catch (err) {
+                console.error('カメラエラー:', err);
+                alert('カメラの起動に失敗しました。');
+                stopNormalScanner();
+            }
+        }
+
+        function stopNormalScanner() {
+            if (scanner) {
+                scanner.stop();
+                scanner = null;
+            }
+            document.getElementById('scannerSection').style.display = 'none';
+            document.getElementById('scannerChoice').style.display = 'block';
+        }
+
+        function onNormalScanSuccess(decodedText) {
+            stopNormalScanner();
+            document.getElementById('janCode').value = decodedText;
+            document.getElementById('productForm').style.display = 'block';
+            
+            const existingProduct = inventory.find(p => p.janCode === decodedText);
+            if (existingProduct) {
+                if (confirm('この商品は既に登録されています。前回の情報を使用しますか？')) {
+                    fillFormWithExisting(existingProduct);
+                }
+            }
+        }
+
+        function skipScanner() {
+            document.getElementById('scannerChoice').style.display = 'none';
+            document.getElementById('janCode').value = '';
+            document.getElementById('productForm').style.display = 'block';
+        }
+
+        function fillFormWithExisting(product) {
+            document.getElementById('productName').value = product.productName || '';
+            document.getElementById('largeCategory').value = product.category.large;
+            updateMediumCategories();
+            document.getElementById('mediumCategory').value = product.category.medium || '';
+            updateSmallCategories();
+            document.getElementById('smallCategory').value = product.category.small || '';
+            document.getElementById('location').value = product.location || '';
+            document.getElementById('generalNotes').value = product.generalNotes || '';
+            document.getElementById('alertEnabled').checked = product.alerts?.stockEnabled || false;
+            document.getElementById('alertThreshold').value = product.alerts?.stockThreshold || 1;
+            document.getElementById('isPinned').checked = product.isPinned || false;
+
+            // 最新の在庫情報から初期値を設定（メモも含む）
+            if (product.stocks.length > 0) {
+                const lastStock = product.stocks[product.stocks.length - 1];
+                document.getElementById('store').value = lastStock.store || '';
+                document.getElementById('price').value = lastStock.price || '';
+                document.getElementById('notes').value = lastStock.notes || '';
+            }
+        }
+
+        function openSettings() {
+            toggleFabMenu();
+            openModal('settingsModal');
+        }
+
+        function openModal(modalId) {
+            document.getElementById(modalId).classList.add('show');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('show');
+            if (scanner) {
+                scanner.stop();
+                scanner = null;
+            }
+        }
+
+        function closeAllModals() {
+            document.querySelectorAll('.modal').forEach(modal => {
+                modal.classList.remove('show');
+            });
+        }
+
+        function toggleExpiry() {
+            const hasExpiry = document.getElementById('hasExpiry').checked;
+            document.getElementById('expiryDate').style.display = hasExpiry ? 'block' : 'none';
+        }
+
+        function updateCategorySelects() {
+            const largeSelect = document.getElementById('largeCategory');
+            largeSelect.innerHTML = '<option value="">大カテゴリを選択</option>';
+            categories.large.forEach(cat => {
+                largeSelect.innerHTML += `<option value="${cat}">${cat}</option>`;
+            });
+        }
+
+        function updateMediumCategories() {
+            const large = document.getElementById('largeCategory').value;
+            const mediumSelect = document.getElementById('mediumCategory');
+            mediumSelect.innerHTML = '<option value="">中カテゴリを選択（任意）</option>';
+            
+            if (large && categories.medium[large]) {
+                categories.medium[large].forEach(cat => {
+                    mediumSelect.innerHTML += `<option value="${cat}">${cat}</option>`;
+                });
+            }
+            
+            updateSmallCategories();
+        }
+
+        function updateSmallCategories() {
+            const medium = document.getElementById('mediumCategory').value;
+            const smallSelect = document.getElementById('smallCategory');
+            smallSelect.innerHTML = '<option value="">小カテゴリを選択（任意）</option>';
+            
+            if (medium && categories.small[medium]) {
+                categories.small[medium].forEach(cat => {
+                    smallSelect.innerHTML += `<option value="${cat}">${cat}</option>`;
+                });
+            }
+        }
+
+        function updateLocationSelect() {
+            const locationSelect = document.getElementById('location');
+            locationSelect.innerHTML = '<option value="">場所を選択</option>';
+            locations.forEach(loc => {
+                locationSelect.innerHTML += `<option value="${loc}">${loc}</option>`;
+            });
+        }
+
+        function handleSubmit(e) {
+            e.preventDefault();
+            
+            const janCode = document.getElementById('janCode').value;
+            const productName = document.getElementById('productName').value;
+            const largeCategory = document.getElementById('largeCategory').value;
+            const mediumCategory = document.getElementById('mediumCategory').value;
+            const smallCategory = document.getElementById('smallCategory').value;
+            const location = document.getElementById('location').value;
+            const quantity = parseInt(document.getElementById('quantity').value);
+            const price = document.getElementById('price').value ? parseFloat(document.getElementById('price').value) : null;
+            const store = document.getElementById('store').value;
+            const hasExpiry = document.getElementById('hasExpiry').checked;
+            const expiryDate = hasExpiry ? document.getElementById('expiryDate').value : null;
+            const notes = document.getElementById('notes').value;
+            const generalNotes = document.getElementById('generalNotes').value;
+            const alertEnabled = document.getElementById('alertEnabled').checked;
+            const alertThreshold = parseInt(document.getElementById('alertThreshold').value);
+            const isPinned = document.getElementById('isPinned').checked;
+
+            if (!largeCategory) {
+                alert('大カテゴリは必須です');
+                return;
+            }
+
+            if (store && !stores.includes(store)) {
+                stores.push(store);
+            }
+
+            const stock = {
+                id: 'STK_' + Date.now(),
+                quantity,
+                purchaseDate: new Date().toISOString().split('T')[0],
+                price,
+                store,
+                expiryDate,
+                notes
+            };
+
+            let product = inventory.find(p => p.janCode === janCode && janCode);
+            
+            if (product) {
+                product.stocks.push(stock);
+                if (generalNotes) {
+                    product.generalNotes = generalNotes;
+                }
+                product.updatedAt = new Date().toISOString();
+                updatePriceStats(product);
+            } else {
+                product = {
+                    id: 'PROD_' + Date.now(),
+                    janCode: janCode || null,
+                    productName: productName || '',
+                    category: {
+                        large: largeCategory,
+                        medium: mediumCategory || '',
+                        small: smallCategory || ''
+                    },
+                    location: location || '',
+                    generalNotes: generalNotes || '',
+                    stocks: [stock],
+                    purchaseHistory: [],
+                    priceStats: {},
+                    storeHistory: {},
+                    alerts: {
+                        stockEnabled: alertEnabled,
+                        stockThreshold: alertThreshold,
+                        expiryEnabled: hasExpiry,
+                        expiryDays: 30
+                    },
+                    isPinned: isPinned,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+                updatePriceStats(product);
+                inventory.push(product);
+            }
+
+            saveData();
+            renderInventory();
+            updateAlerts();
+            closeModal('addModal');
+            
+            showNotification('✅ 商品を登録しました');
+        }
+
+        function updatePriceStats(product) {
+            const prices = product.stocks.filter(s => s.price).map(s => s.price);
+            if (prices.length > 0) {
+                product.priceStats = {
+                    lowest: Math.min(...prices),
+                    highest: Math.max(...prices),
+                    average: prices.reduce((a, b) => a + b, 0) / prices.length
+                };
+                
+                const lowestStock = product.stocks.find(s => s.price === product.priceStats.lowest);
+                if (lowestStock) {
+                    product.priceStats.lowestStore = lowestStock.store;
+                }
+            }
+
+            // 店舗別統計
+            product.storeHistory = {};
+            product.stocks.forEach(stock => {
+                if (stock.store) {
+                    if (!product.storeHistory[stock.store]) {
+                        product.storeHistory[stock.store] = {
+                            count: 0,
+                            prices: [],
+                            quantities: []
+                        };
+                    }
+                    product.storeHistory[stock.store].count++;
+                    product.storeHistory[stock.store].quantities.push(stock.quantity);
+                    if (stock.price) {
+                        product.storeHistory[stock.store].prices.push(stock.price);
+                    }
+                }
+            });
+
+            Object.keys(product.storeHistory).forEach(store => {
+                const history = product.storeHistory[store];
+                if (history.prices.length > 0) {
+                    history.lowest = Math.min(...history.prices);
+                    history.highest = Math.max(...history.prices);
+                    history.average = history.prices.reduce((a, b) => a + b, 0) / history.prices.length;
+                }
+            });
+        }
+
+        function getDisplayName(product) {
+            if (product.productName) {
+                return product.productName;
+            }
+            if (product.category.small) {
+                return product.category.small;
+            }
+            if (product.category.medium) {
+                return product.category.medium;
+            }
+            if (product.category.large) {
+                return product.category.large;
+            }
+            if (product.janCode) {
+                return `JAN: ${product.janCode}`;
+            }
+            return `商品 #${product.id}`;
+        }
+
+        function getCategoryPath(product) {
+            let path = product.category.large;
+            if (product.category.medium && product.category.small) {
+                path += ' > ... > ' + product.category.small;
+            } else if (product.category.medium) {
+                path += ' > ' + product.category.medium;
+            } else if (product.category.small) {
+                path += ' > ' + product.category.small;
+            }
+            return path;
+        }
+
+        function getTotalStock(product) {
+            return product.stocks.reduce((sum, stock) => sum + stock.quantity, 0);
+        }
+
+        function getExpiryStatus(product) {
+            const today = new Date();
+            const expiringStocks = product.stocks
+                .filter(s => s.expiryDate)
+                .map(s => ({
+                    ...s,
+                    daysUntilExpiry: Math.floor((new Date(s.expiryDate) - today) / (1000 * 60 * 60 * 24))
+                }))
+                .filter(s => s.daysUntilExpiry >= 0)
+                .sort((a, b) => a.daysUntilExpiry - b.daysUntilExpiry);
+
+            if (expiringStocks.length === 0) return null;
+
+            const nearest = expiringStocks[0];
+            if (nearest.daysUntilExpiry <= 7) {
+                return { level: 'critical', days: nearest.daysUntilExpiry, date: nearest.expiryDate };
+            } else if (nearest.daysUntilExpiry <= 30) {
+                return { level: 'warning', days: nearest.daysUntilExpiry, date: nearest.expiryDate };
+            }
+            return null;
+        }
+
+        function renderInventory() {
+            const list = document.getElementById('inventoryList');
+            
+            if (currentTab === 'shopping-list') {
+                renderShoppingList();
+                return;
+            }
+
+            let filtered = inventory.filter(p => {
+                // プロファイルフィルター
+                if (!isProductVisible(p)) return false;
+                
+                // カテゴリーフィルター
+                if (!matchesCategoryFilter(p)) return false;
+
+                // タブフィルター
+                const totalStock = getTotalStock(p);
+                if (currentTab === 'low-stock') {
+                    // 在庫少タブ：アラートONなら閾値以下、OFFなら0個のみ
+                    if (p.alerts && p.alerts.stockEnabled) {
+                        return totalStock <= (p.alerts.stockThreshold || 1);
+                    } else {
+                        return totalStock === 0;
+                    }
+                } else if (currentTab !== 'all' && currentTab !== 'recent' && currentTab !== 'expiring') {
+                    return totalStock > 0;
+                }
+                
+                return true;
+            });
+
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            if (searchTerm) {
+                filtered = filtered.filter(product => {
+                    return getDisplayName(product).toLowerCase().includes(searchTerm) ||
+                           getCategoryPath(product).toLowerCase().includes(searchTerm) ||
+                           (product.generalNotes && product.generalNotes.toLowerCase().includes(searchTerm)) ||
+                           product.stocks.some(s => 
+                               (s.store && s.store.toLowerCase().includes(searchTerm)) ||
+                               (s.notes && s.notes.toLowerCase().includes(searchTerm))
+                           ) ||
+                           (product.janCode && product.janCode.includes(searchTerm));
+                });
+            }
+
+            if (currentTab === 'recent') {
+                renderRecentRegistrations(filtered);
+                return;
+            } else if (currentTab === 'expiring') {
+                filtered = filtered.filter(p => getExpiryStatus(p));
+            }
+
+            // ピン留めでソート
+            filtered.sort((a, b) => {
+                if (a.isPinned && !b.isPinned) return -1;
+                if (!a.isPinned && b.isPinned) return 1;
+                return 0;
+            });
+
+            if (filtered.length === 0) {
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🔍</div>
+                        <div class="empty-state-text">商品が見つかりません</div>
+                    </div>
+                `;
+                return;
+            }
+
+            list.innerHTML = filtered.map(product => {
+                const totalStock = getTotalStock(product);
+                const isLowStock = totalStock <= (product.alerts?.stockThreshold || 1);
+                const isZeroStock = totalStock === 0;
+                const expiryStatus = getExpiryStatus(product);
+                
+                let expiryHtml = '';
+                if (expiryStatus) {
+                    const expiryClass = expiryStatus.level === 'critical' ? 'expiry-critical' : '';
+                    const icon = expiryStatus.level === 'critical' ? '🚨' : '⚠️';
+                    expiryHtml = `
+                        <div class="expiry-warning ${expiryClass}">
+                            ${icon} 期限まで${expiryStatus.days}日 (${expiryStatus.date})
+                        </div>
+                    `;
+                }
+
+                const alertBadge = product.alerts?.stockEnabled ? 
+                    '<span class="alert-badge enabled">🔔 アラートON</span>' :
+                    '<span class="alert-badge disabled">🔕 アラートOFF</span>';
+
+                const stockClass = isZeroStock ? 'zero' : (isLowStock ? 'low' : '');
+
+                return `
+                    <div class="card ${product.isPinned ? 'pinned' : ''}" onclick="showDetail('${product.id}')">
+                        ${product.isPinned ? '<div class="pin-badge">⭐ お気に入り</div>' : ''}
+                        <div class="card-header">
+                            <div style="flex: 1; min-width: 0;">
+                                <div class="card-title">${getDisplayName(product)}</div>
+                                <div class="card-category">${getCategoryPath(product)}</div>
+                                ${alertBadge}
+                            </div>
+                            <div class="card-stock ${stockClass}">
+                                📦 ${totalStock}個${getQuantityMemoDisplay(product, 10)}
+                            </div>
+                        </div>
+                        ${expiryHtml}
+                        <div class="card-info">
+                            ${product.location ? `<div class="info-item">📍 ${product.location}</div>` : ''}
+                            ${product.priceStats.lowest ? `
+                                <div class="info-item">
+                                    💰 最安値: <strong>¥${product.priceStats.lowest}</strong>
+                                </div>
+                            ` : ''}
+                            ${product.priceStats.lowestStore ? `
+                                <div class="info-item">🏪 ${product.priceStats.lowestStore}</div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderRecentRegistrations(filtered) {
+            const list = document.getElementById('inventoryList');
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - 30);
+
+            const sessions = {};
+            
+            filtered.forEach(product => {
+                product.stocks.forEach(stock => {
+                    const stockDate = new Date(stock.purchaseDate);
+                    if (stockDate >= cutoffDate) {
+                        const key = `${stock.purchaseDate}_${stock.store || '未設定'}`;
+                        if (!sessions[key]) {
+                            sessions[key] = {
+                                date: stock.purchaseDate,
+                                store: stock.store || '未設定',
+                                items: []
+                            };
+                        }
+                        sessions[key].items.push({
+                            product: product,
+                            stock: stock
+                        });
+                    }
+                });
+            });
+
+            const sortedSessions = Object.values(sessions).sort((a, b) => 
+                new Date(b.date) - new Date(a.date)
+            );
+
+            if (sortedSessions.length === 0) {
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📅</div>
+                        <div class="empty-state-text">最近の登録はありません</div>
+                    </div>
+                `;
+                return;
+            }
+
+            list.innerHTML = sortedSessions.map(session => {
+                const dateObj = new Date(session.date);
+                const today = new Date();
+                const yesterday = new Date(today);
+                yesterday.setDate(yesterday.getDate() - 1);
+                
+                let dateLabel = session.date;
+                if (dateObj.toDateString() === today.toDateString()) {
+                    dateLabel = '今日';
+                } else if (dateObj.toDateString() === yesterday.toDateString()) {
+                    dateLabel = '昨日';
+                }
+
+                const itemsHtml = session.items.map(item => `
+                    <div class="shopping-item" onclick="showDetail('${item.product.id}')">
+                        <div>
+                            <div style="font-weight: 500;">${getDisplayName(item.product)}</div>
+                            <div style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;">
+                                x${item.stock.quantity}
+                            </div>
+                        </div>
+                        <div style="text-align: right;">
+                            ${item.stock.price ? `<div style="font-weight: 500; color: var(--primary);">¥${item.stock.price}</div>` : '<div style="color: var(--text-secondary);">¥--</div>'}
+                        </div>
+                    </div>
+                `).join('');
+
+                return `
+                    <div class="shopping-list">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <div>
+                                <h3 style="margin: 0;">📅 ${dateLabel} (${session.date})</h3>
+                                <div style="color: var(--text-secondary); font-size: 14px; margin-top: 4px;">
+                                    🏪 ${session.store}
+                                </div>
+                            </div>
+                            <div style="color: var(--text-secondary); font-size: 14px;">
+                                ${session.items.length}点
+                            </div>
+                        </div>
+                        ${itemsHtml}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderShoppingList() {
+            const list = document.getElementById('inventoryList');
+            
+            const needsToBuy = inventory.filter(product => {
+                if (!isProductVisible(product)) return false;
+                if (!matchesCategoryFilter(product)) return false;
+                
+                const totalStock = getTotalStock(product);
+                
+                // アラートONで閾値以下の商品
+                return product.alerts?.stockEnabled && totalStock <= (product.alerts.stockThreshold || 1);
+            });
+
+            if (needsToBuy.length === 0) {
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">✅</div>
+                        <div class="empty-state-text">買い物リストは空です</div>
+                        <div style="margin-top: 10px; color: var(--text-secondary); font-size: 14px;">
+                            在庫が十分にあります
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            list.innerHTML = `
+                <div class="shopping-list">
+                    <h3>🛒 買い物リスト (${needsToBuy.length}点)</h3>
+                    ${needsToBuy.map(product => {
+                        const totalStock = getTotalStock(product);
+                        return `
+                            <div class="shopping-item" onclick="showDetail('${product.id}')">
+                                <div>
+                                    <div style="font-weight: 500;">${getDisplayName(product)}</div>
+                                    <div style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;">
+                                        現在庫: ${totalStock}個 / 閾値: ${product.alerts.stockThreshold}個
+                                    </div>
+                                </div>
+                                <div style="text-align: right;">
+                                    ${product.priceStats.lowest ? 
+                                        `<div style="font-weight: 500; color: var(--primary);">¥${product.priceStats.lowest}</div>
+                                         <div style="font-size: 12px; color: var(--text-secondary);">${product.priceStats.lowestStore || ''}</div>` : 
+                                        '<div style="color: var(--text-secondary);">価格情報なし</div>'}
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        function showDetail(productId) {
+            const product = inventory.find(p => p.id === productId);
+            if (!product) return;
+
+            const totalStock = getTotalStock(product);
+
+            const stocksHtml = product.stocks.map(stock => {
+                const daysUntilExpiry = stock.expiryDate ? 
+                    Math.floor((new Date(stock.expiryDate) - new Date()) / (1000 * 60 * 60 * 24)) : null;
+                
+                let expiryBadge = '';
+                if (daysUntilExpiry !== null) {
+                    if (daysUntilExpiry < 0) {
+                        expiryBadge = '<span style="background: #F8D7DA; color: #842029; padding: 4px 10px; border-radius: 12px; font-size: 12px;">期限切れ</span>';
+                    } else if (daysUntilExpiry <= 7) {
+                        expiryBadge = `<span style="background: #F8D7DA; color: #842029; padding: 4px 10px; border-radius: 12px; font-size: 12px;">期限まで${daysUntilExpiry}日</span>`;
+                    } else if (daysUntilExpiry <= 30) {
+                        expiryBadge = `<span style="background: #FFF3CD; color: #856404; padding: 4px 10px; border-radius: 12px; font-size: 12px;">期限まで${daysUntilExpiry}日</span>`;
+                    }
+                }
+
+                return `
+                    <div style="background: var(--bg-main); padding: 12px; border-radius: 6px; margin-bottom: 10px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <strong>📦 ${stock.quantity}個${stock.notes && shouldShowQuantityMemo(product) ? ` (${truncateText(stock.notes, 20)})` : ''}</strong>
+                            ${stock.price ? `<strong style="color: var(--primary);">¥${stock.price}</strong>` : ''}
+                        </div>
+                        <div style="font-size: 13px; color: var(--text-secondary);">
+                            📅 ${stock.purchaseDate}
+                            ${stock.store ? ` | 🏪 ${stock.store}` : ''}
+                        </div>
+                        ${expiryBadge ? `<div style="margin-top: 6px;">${expiryBadge}</div>` : ''}
+                        ${stock.notes ? `<div style="margin-top: 8px; font-size: 13px;">📝 ${stock.notes}</div>` : ''}
+                    </div>
+                `;
+            }).join('');
+
+            const alertStatus = product.alerts?.stockEnabled ? 
+                `<p><strong>🔔 在庫アラート:</strong> 有効 (閾値: ${product.alerts.stockThreshold}個)</p>` :
+                `<p><strong>🔕 在庫アラート:</strong> 無効</p>`;
+
+            document.getElementById('detailTitle').textContent = getDisplayName(product);
+            document.getElementById('detailContent').innerHTML = `
+                ${product.isPinned ? '<p><strong>⭐ お気に入り</strong></p>' : ''}
+                ${product.janCode ? `<p><strong>JANコード:</strong> ${product.janCode}</p>` : ''}
+                <p><strong>カテゴリ:</strong> ${getCategoryPath(product)}</p>
+                ${product.location ? `<p><strong>保管場所:</strong> ${product.location}</p>` : ''}
+                <p><strong>現在庫:</strong> ${totalStock}個</p>
+                ${alertStatus}
+                
+                ${product.generalNotes ? `
+                    <div style="background: var(--bg-main); padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <strong>📝 商品メモ</strong>
+                        <div style="margin-top: 8px; white-space: pre-wrap;">${product.generalNotes}</div>
+                    </div>
+                ` : ''}
+
+                <div style="margin-top: 20px;">
+                    <strong style="font-size: 16px;">在庫明細</strong>
+                    <div style="margin-top: 10px;">
+                        ${stocksHtml}
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px;">
+                    <button class="btn btn-primary" onclick="quickAddOne('${product.id}')">
+                        ➕ 1個追加
+                    </button>
+                    <button class="btn btn-primary" onclick="addStock('${product.id}')">
+                        在庫を追加
+                    </button>
+                    <button class="btn btn-secondary" onclick="togglePin('${product.id}')">
+                        ${product.isPinned ? '⭐ 解除' : '⭐ お気に入り'}
+                    </button>
+                    <button class="btn btn-secondary" onclick="toggleAlert('${product.id}')">
+                        ${product.alerts?.stockEnabled ? '🔕 アラートOFF' : '🔔 アラートON'}
+                    </button>
+                    <button class="btn btn-secondary" onclick="openEditProductCategory('${product.id}')" style="grid-column: 1 / -1;">
+                        📁 カテゴリを変更
+                    </button>
+                </div>
+            `;
+
+            openModal('detailModal');
+        }
+
+        function quickAddOne(productId) {
+            const product = inventory.find(p => p.id === productId);
+            if (!product) return;
+
+            const lastStock = product.stocks[product.stocks.length - 1];
+            const newStock = {
+                id: 'STK_' + Date.now(),
+                quantity: 1,
+                purchaseDate: new Date().toISOString().split('T')[0],
+                price: lastStock?.price || null,
+                store: lastStock?.store || '',
+                expiryDate: null,
+                notes: lastStock?.notes || ''
+            };
+
+            product.stocks.push(newStock);
+            product.updatedAt = new Date().toISOString();
+            updatePriceStats(product);
+
+            saveData();
+            renderInventory();
+            updateAlerts();
+            closeModal('detailModal');
+
+            showNotification(`✅ ${getDisplayName(product)} を1個追加しました`);
+        }
+
+        function addStock(productId) {
+            closeModal('detailModal');
+            const product = inventory.find(p => p.id === productId);
+            if (!product) return;
+
+            openNormalRegister();
+            document.getElementById('janCode').value = product.janCode || '';
+            fillFormWithExisting(product);
+        }
+
+        function togglePin(productId) {
+            const product = inventory.find(p => p.id === productId);
+            if (!product) return;
+
+            product.isPinned = !product.isPinned;
+            product.updatedAt = new Date().toISOString();
+
+            saveData();
+            renderInventory();
+            closeModal('detailModal');
+
+            showNotification(product.isPinned ? '⭐ お気に入りに追加しました' : '⭐ お気に入りから削除しました');
+        }
+
+        function toggleAlert(productId) {
+            const product = inventory.find(p => p.id === productId);
+            if (!product) return;
+
+            if (!product.alerts) {
+                product.alerts = { stockEnabled: true, stockThreshold: 1, expiryEnabled: false, expiryDays: 30 };
+            } else {
+                product.alerts.stockEnabled = !product.alerts.stockEnabled;
+            }
+            product.updatedAt = new Date().toISOString();
+
+            saveData();
+            renderInventory();
+            updateAlerts();
+            closeModal('detailModal');
+
+            showNotification(product.alerts.stockEnabled ? '🔔 アラートを有効にしました' : '🔕 アラートを無効にしました');
+        }
+
+        // カテゴリ変更機能
+        let currentEditingCategoryProductId = null;
+
+        function openEditProductCategory(productId) {
+            const product = inventory.find(p => p.id === productId);
+            if (!product) return;
+
+            currentEditingCategoryProductId = productId;
+            closeModal('detailModal');
+
+            // 商品情報を表示
+            document.getElementById('editCategoryProductInfo').innerHTML = `
+                <div style="font-weight: 500; margin-bottom: 8px;">${getDisplayName(product)}</div>
+                <div style="font-size: 14px; color: var(--text-secondary);">
+                    現在のカテゴリ: ${getCategoryPath(product)}
+                </div>
+            `;
+
+            // カテゴリセレクトを初期化
+            const largeSel = document.getElementById('editCatLarge');
+            largeSel.innerHTML = '<option value="">大カテゴリを選択</option>';
+            categories.large.forEach(cat => {
+                const selected = cat === product.category.large ? 'selected' : '';
+                largeSel.innerHTML += `<option value="${cat}" ${selected}>${cat}</option>`;
+            });
+
+            // 中・小カテゴリを更新
+            updateEditCatMediumOptions();
+            setTimeout(() => {
+                document.getElementById('editCatMedium').value = product.category.medium || '';
+                updateEditCatSmallOptions();
+                setTimeout(() => {
+                    document.getElementById('editCatSmall').value = product.category.small || '';
+                }, 0);
+            }, 0);
+
+            // フォームのsubmitイベント設定
+            const form = document.getElementById('editCategoryForm');
+            form.onsubmit = handleEditCategorySubmit;
+
+            openModal('editCategoryModal');
+        }
+
+        function updateEditCatMediumOptions() {
+            const large = document.getElementById('editCatLarge').value;
+            const mediumSel = document.getElementById('editCatMedium');
+            mediumSel.innerHTML = '<option value="">中カテゴリを選択（任意）</option>';
+            
+            if (large && categories.medium[large]) {
+                categories.medium[large].forEach(cat => {
+                    mediumSel.innerHTML += `<option value="${cat}">${cat}</option>`;
+                });
+            }
+            
+            updateEditCatSmallOptions();
+        }
+
+        function updateEditCatSmallOptions() {
+            const medium = document.getElementById('editCatMedium').value;
+            const smallSel = document.getElementById('editCatSmall');
+            smallSel.innerHTML = '<option value="">小カテゴリを選択（任意）</option>';
+            
+            if (medium && categories.small[medium]) {
+                categories.small[medium].forEach(cat => {
+                    smallSel.innerHTML += `<option value="${cat}">${cat}</option>`;
+                });
+            }
+        }
+
+        function handleEditCategorySubmit(e) {
+            e.preventDefault();
+            
+            const product = inventory.find(p => p.id === currentEditingCategoryProductId);
+            if (!product) return;
+
+            const newLarge = document.getElementById('editCatLarge').value;
+            const newMedium = document.getElementById('editCatMedium').value;
+            const newSmall = document.getElementById('editCatSmall').value;
+
+            if (!newLarge) {
+                alert('大カテゴリは必須です');
+                return;
+            }
+
+            // カテゴリを更新
+            product.category = {
+                large: newLarge,
+                medium: newMedium || '',
+                small: newSmall || ''
+            };
+            product.updatedAt = new Date().toISOString();
+
+            saveData();
+            renderInventory();
+            closeModal('editCategoryModal');
+            
+            showNotification(`✅ ${getDisplayName(product)} のカテゴリを変更しました`);
+        }
+
+        function updateAlerts() {
+            const banner = document.getElementById('alertBanner');
+            const alerts = [];
+
+            inventory.forEach(product => {
+                if (!isProductVisible(product)) return;
+                
+                const totalStock = getTotalStock(product);
+                if (totalStock === 0) return;
+
+                // アラートONの商品のみ通知
+                if (totalStock <= (product.alerts?.stockThreshold || 1) && product.alerts?.stockEnabled) {
+                    alerts.push({
+                        type: 'stock',
+                        message: `${getDisplayName(product)} の在庫が少なくなっています（${totalStock}個）`
+                    });
+                }
+
+                const expiryStatus = getExpiryStatus(product);
+                if (expiryStatus && product.alerts?.expiryEnabled) {
+                    if (expiryStatus.level === 'critical') {
+                        alerts.push({
+                            type: 'expiry',
+                            message: `🚨 ${getDisplayName(product)} の賞味期限が近づいています（残り${expiryStatus.days}日）`
+                        });
+                    }
+                }
+            });
+
+            if (alerts.length > 0) {
+                banner.innerHTML = alerts.map(alert => 
+                    `<div class="alert-item">${alert.message}</div>`
+                ).join('');
+                banner.classList.add('show');
+            } else {
+                banner.classList.remove('show');
+            }
+        }
+
+        function handleSearch() {
+            renderInventory();
+        }
+
+        function exportData() {
+            const data = {
+                inventory,
+                categories,
+                locations,
+                stores,
+                profiles,
+                currentProfile,
+                exportDate: new Date().toISOString()
+            };
+
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `inventory_backup_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            showNotification('✅ データをエクスポートしました');
+        }
+
+        // カテゴリCSVインポート
+        function importCategoriesCSV() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.csv';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const csv = event.target.result;
+                        const lines = csv.split('\n');
+                        
+                        // ヘッダー行をスキップ
+                        const dataLines = lines.slice(1).filter(line => line.trim());
+                        
+                        // 新しいカテゴリ構造を構築
+                        const newCategories = {
+                            large: [],
+                            medium: {},
+                            small: {}
+                        };
+                        
+                        dataLines.forEach(line => {
+                            // CSVパース（ダブルクォート対応）
+                            const matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
+                            if (!matches || matches.length < 1) return;
+                            
+                            const large = matches[0]?.replace(/^"|"$/g, '').trim();
+                            const medium = matches[1]?.replace(/^"|"$/g, '').trim() || '';
+                            const small = matches[2]?.replace(/^"|"$/g, '').trim() || '';
+                            
+                            if (!large) return;
+                            
+                            // 大カテゴリ追加
+                            if (!newCategories.large.includes(large)) {
+                                newCategories.large.push(large);
+                                newCategories.medium[large] = [];
+                            }
+                            
+                            // 中カテゴリ追加
+                            if (medium && !newCategories.medium[large].includes(medium)) {
+                                newCategories.medium[large].push(medium);
+                                newCategories.small[medium] = [];
+                            }
+                            
+                            // 小カテゴリ追加
+                            if (medium && small && !newCategories.small[medium].includes(small)) {
+                                newCategories.small[medium].push(small);
+                            }
+                        });
+                        
+                        if (!confirm('カテゴリを上書きしますか？この操作は取り消せません。\n※既存の商品データは保持されます')) {
+                            return;
+                        }
+                        
+                        // カテゴリを更新
+                        categories = newCategories;
+                        
+                        // 全プロファイルのカテゴリも更新
+                        profiles.forEach(profile => {
+                            profile.visibleCategories = {
+                                large: categories.large.slice(),
+                                medium: Object.keys(categories.medium).reduce((acc, key) => {
+                                    acc[key] = categories.medium[key].slice();
+                                    return acc;
+                                }, {}),
+                                small: Object.keys(categories.small).reduce((acc, key) => {
+                                    acc[key] = categories.small[key].slice();
+                                    return acc;
+                                }, {})
+                            };
+                        });
+                        
+                        saveData();
+                        updateCategorySelects();
+                        updateFilterSelects();
+                        closeModal('settingsModal');
+                        
+                        showNotification('✅ カテゴリをCSVからインポートしました');
+                    } catch (err) {
+                        console.error('CSVインポートエラー:', err);
+                        alert('CSVファイルの読み込みに失敗しました: ' + err.message);
+                    }
+                };
+                reader.readAsText(file, 'UTF-8');
+            };
+            input.click();
+        }
+
+        function importData() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'application/json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const data = JSON.parse(event.target.result);
+                        
+                        if (confirm('現在のデータを上書きしますか？この操作は取り消せません。')) {
+                            inventory = data.inventory || [];
+                            categories = data.categories || categories;
+                            locations = data.locations || locations;
+                            stores = data.stores || [];
+                            profiles = data.profiles || [];
+                            currentProfile = data.currentProfile || null;
+                            
+                            saveData();
+                            initializeApp();
+                            closeModal('settingsModal');
+                            
+                            showNotification('✅ データをインポートしました');
+                        }
+                    } catch (err) {
+                        alert('ファイルの読み込みに失敗しました: ' + err.message);
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        // ========================================
+        // CSV エクスポート機能
+        // ========================================
+
+        // 1. カテゴリCSVエクスポート
+        function exportCategoriesCSV() {
+            let csv = '大カテゴリ,中カテゴリ,小カテゴリ\n';
+            
+            categories.large.forEach(large => {
+                if (categories.medium[large] && categories.medium[large].length > 0) {
+                    categories.medium[large].forEach(medium => {
+                        if (categories.small[medium] && categories.small[medium].length > 0) {
+                            categories.small[medium].forEach(small => {
+                                csv += `"${large}","${medium}","${small}"\n`;
+                            });
+                        } else {
+                            csv += `"${large}","${medium}",""\n`;
+                        }
+                    });
+                } else {
+                    csv += `"${large}","",""\n`;
+                }
+            });
+            
+            downloadCSV(csv, `categories_${getDateString()}.csv`);
+            showNotification('✅ カテゴリをCSVでエクスポートしました');
+        }
+
+        // 2. 保管場所CSVエクスポート
+        function exportLocationsCSV() {
+            let csv = '保管場所\n';
+            locations.forEach(loc => {
+                csv += `"${loc}"\n`;
+            });
+            
+            downloadCSV(csv, `locations_${getDateString()}.csv`);
+            showNotification('✅ 保管場所をCSVでエクスポートしました');
+        }
+
+        // 3. 店舗CSVエクスポート
+        function exportStoresCSV() {
+            let csv = '店舗名\n';
+            stores.forEach(store => {
+                csv += `"${store}"\n`;
+            });
+            
+            downloadCSV(csv, `stores_${getDateString()}.csv`);
+            showNotification('✅ 店舗リストをCSVでエクスポートしました');
+        }
+
+        // 4. 現在のプロファイルの在庫CSVエクスポート
+        function exportCurrentInventoryCSV() {
+            const profile = getCurrentProfile();
+            if (!profile) {
+                alert('プロファイルが選択されていません');
+                return;
+            }
+            
+            const filteredInventory = inventory.filter(p => isProductVisible(p));
+            const csv = generateInventoryCSV(filteredInventory);
+            
+            downloadCSV(csv, `inventory_${profile.name}_${getDateString()}.csv`);
+            showNotification(`✅ ${profile.name}の在庫をCSVでエクスポートしました`);
+        }
+
+        // 5. 全在庫CSVエクスポート
+        function exportAllInventoryCSV() {
+            const csv = generateInventoryCSV(inventory, true);
+            downloadCSV(csv, `inventory_all_${getDateString()}.csv`);
+            showNotification('✅ 全在庫をCSVでエクスポートしました');
+        }
+
+        // 在庫CSV生成共通関数
+        function generateInventoryCSV(inventoryData, includeProfile = false) {
+            let csv = includeProfile ? 
+                'プロファイル,JANコード,商品名,大カテゴリ,中カテゴリ,小カテゴリ,保管場所,個数,金額,購入店,購入日,賞味期限,在庫メモ,商品全体メモ,アラートON,在庫閾値,お気に入り\n' :
+                'JANコード,商品名,大カテゴリ,中カテゴリ,小カテゴリ,保管場所,個数,金額,購入店,購入日,賞味期限,在庫メモ,商品全体メモ,アラートON,在庫閾値,お気に入り\n';
+            
+            inventoryData.forEach(product => {
+                // プロファイル名を取得（この商品が表示されるプロファイル）
+                let profileNames = [];
+                if (includeProfile) {
+                    profiles.forEach(prof => {
+                        const tempCurrentProfile = currentProfile;
+                        currentProfile = prof.id;
+                        if (isProductVisible(product)) {
+                            profileNames.push(prof.name);
+                        }
+                        currentProfile = tempCurrentProfile;
+                    });
+                }
+                
+                const profileName = profileNames.length > 0 ? profileNames.join(';') : '共通';
+                
+                product.stocks.forEach(stock => {
+                    const row = [
+                        ...(includeProfile ? [escapeCSV(profileName)] : []),
+                        escapeCSV(product.janCode || ''),
+                        escapeCSV(product.productName || ''),
+                        escapeCSV(product.category.large || ''),
+                        escapeCSV(product.category.medium || ''),
+                        escapeCSV(product.category.small || ''),
+                        escapeCSV(product.location || ''),
+                        stock.quantity,
+                        stock.price || '',
+                        escapeCSV(stock.store || ''),
+                        stock.purchaseDate || '',
+                        stock.expiryDate || '',
+                        escapeCSV(stock.notes || ''),
+                        escapeCSV(product.generalNotes || ''),
+                        product.alerts?.stockEnabled ? 'TRUE' : 'FALSE',
+                        product.alerts?.stockThreshold || 1,
+                        product.isPinned ? 'TRUE' : 'FALSE'
+                    ];
+                    csv += row.join(',') + '\n';
+                });
+            });
+            
+            return csv;
+        }
+
+        // ========================================
+        // CSV インポート機能
+        // ========================================
+
+        // 1. カテゴリCSVインポート
+        function importCategoriesCSV() {
+            const input = createFileInput('.csv', (content) => {
+                try {
+                    const lines = content.split('\n');
+                    const dataLines = lines.slice(1).filter(line => line.trim());
+                    
+                    const newCategories = {
+                        large: [],
+                        medium: {},
+                        small: {}
+                    };
+                    
+                    dataLines.forEach(line => {
+                        const cols = parseCSVLine(line);
+                        if (cols.length < 1) return;
+                        
+                        const large = cols[0]?.trim();
+                        const medium = cols[1]?.trim() || '';
+                        const small = cols[2]?.trim() || '';
+                        
+                        if (!large) return;
+                        
+                        if (!newCategories.large.includes(large)) {
+                            newCategories.large.push(large);
+                            newCategories.medium[large] = [];
+                        }
+                        
+                        if (medium && !newCategories.medium[large].includes(medium)) {
+                            newCategories.medium[large].push(medium);
+                            newCategories.small[medium] = [];
+                        }
+                        
+                        if (medium && small && !newCategories.small[medium].includes(small)) {
+                            newCategories.small[medium].push(small);
+                        }
+                    });
+                    
+                    if (!confirm('カテゴリを上書きしますか？\n※既存の商品データは保持されます')) {
+                        return;
+                    }
+                    
+                    categories = newCategories;
+                    
+                    // 全プロファイルのカテゴリも更新
+                    profiles.forEach(profile => {
+                        profile.visibleCategories = {
+                            large: categories.large.slice(),
+                            medium: Object.keys(categories.medium).reduce((acc, key) => {
+                                acc[key] = categories.medium[key].slice();
+                                return acc;
+                            }, {}),
+                            small: Object.keys(categories.small).reduce((acc, key) => {
+                                acc[key] = categories.small[key].slice();
+                                return acc;
+                            }, {})
+                        };
+                    });
+                    
+                    saveData();
+                    updateCategorySelects();
+                    updateFilterSelects();
+                    showNotification('✅ カテゴリをインポートしました');
+                } catch (err) {
+                    alert('CSVの読み込みに失敗しました: ' + err.message);
+                }
+            });
+            input.click();
+        }
+
+        // 2. 保管場所CSVインポート
+        function importLocationsCSV() {
+            const input = createFileInput('.csv', (content) => {
+                try {
+                    const lines = content.split('\n');
+                    const dataLines = lines.slice(1).filter(line => line.trim());
+                    
+                    const newLocations = [];
+                    dataLines.forEach(line => {
+                        const cols = parseCSVLine(line);
+                        const loc = cols[0]?.trim();
+                        if (loc && !newLocations.includes(loc)) {
+                            newLocations.push(loc);
+                        }
+                    });
+                    
+                    if (!confirm(`保管場所を上書きしますか？\n新しい場所数: ${newLocations.length}個`)) {
+                        return;
+                    }
+                    
+                    locations = newLocations;
+                    saveData();
+                    updateLocationSelect();
+                    showNotification('✅ 保管場所をインポートしました');
+                } catch (err) {
+                    alert('CSVの読み込みに失敗しました: ' + err.message);
+                }
+            });
+            input.click();
+        }
+
+        // 3. 店舗CSVインポート
+        function importStoresCSV() {
+            const input = createFileInput('.csv', (content) => {
+                try {
+                    const lines = content.split('\n');
+                    const dataLines = lines.slice(1).filter(line => line.trim());
+                    
+                    const newStores = [];
+                    dataLines.forEach(line => {
+                        const cols = parseCSVLine(line);
+                        const store = cols[0]?.trim();
+                        if (store && !newStores.includes(store)) {
+                            newStores.push(store);
+                        }
+                    });
+                    
+                    if (!confirm(`店舗リストを上書きしますか？\n新しい店舗数: ${newStores.length}個`)) {
+                        return;
+                    }
+                    
+                    stores = newStores;
+                    saveData();
+                    showNotification('✅ 店舗リストをインポートしました');
+                } catch (err) {
+                    alert('CSVの読み込みに失敗しました: ' + err.message);
+                }
+            });
+            input.click();
+        }
+
+        // 4. 在庫CSVインポート
+        function importInventoryCSV() {
+            const profile = getCurrentProfile();
+            if (!profile) {
+                alert('プロファイルが選択されていません');
+                return;
+            }
+            
+            const input = createFileInput('.csv', (content) => {
+                try {
+                    const lines = content.split('\n');
+                    const headers = parseCSVLine(lines[0]);
+                    const dataLines = lines.slice(1).filter(line => line.trim());
+                    
+                    if (!confirm(`現在のプロファイル「${profile.name}」の在庫を上書きしますか？\n※既存の在庫は削除されます\n新しい在庫行数: ${dataLines.length}行`)) {
+                        return;
+                    }
+                    
+                    // 現在のプロファイルで表示される商品を削除
+                    inventory = inventory.filter(p => !isProductVisible(p));
+                    
+                    // CSVから商品を作成
+                    const productMap = new Map();
+                    
+                    dataLines.forEach(line => {
+                        const cols = parseCSVLine(line);
+                        if (cols.length < 7) return;
+                        
+                        let idx = 0;
+                        const janCode = cols[idx++]?.trim() || null;
+                        const productName = cols[idx++]?.trim() || '';
+                        const large = cols[idx++]?.trim();
+                        const medium = cols[idx++]?.trim() || '';
+                        const small = cols[idx++]?.trim() || '';
+                        const location = cols[idx++]?.trim() || '';
+                        const quantity = parseInt(cols[idx++]) || 1;
+                        const price = cols[idx] ? parseFloat(cols[idx++]) : null;
+                        const store = cols[idx++]?.trim() || '';
+                        const purchaseDate = cols[idx++]?.trim() || new Date().toISOString().split('T')[0];
+                        const expiryDate = cols[idx++]?.trim() || null;
+                        const notes = cols[idx++]?.trim() || '';
+                        const generalNotes = cols[idx++]?.trim() || '';
+                        const alertEnabled = cols[idx++]?.trim().toUpperCase() === 'TRUE';
+                        const alertThreshold = parseInt(cols[idx++]) || 1;
+                        const isPinned = cols[idx++]?.trim().toUpperCase() === 'TRUE';
+                        
+                        if (!large) return;
+                        
+                        // 商品キーを作成（JAN or 商品名+カテゴリ）
+                        const productKey = janCode || `${productName}_${large}_${medium}_${small}`;
+                        
+                        let product = productMap.get(productKey);
+                        if (!product) {
+                            product = {
+                                id: 'PROD_' + Date.now() + '_' + Math.random(),
+                                janCode: janCode,
+                                productName: productName,
+                                category: { large, medium, small },
+                                location: location,
+                                generalNotes: generalNotes,
+                                stocks: [],
+                                purchaseHistory: [],
+                                priceStats: {},
+                                storeHistory: {},
+                                alerts: {
+                                    stockEnabled: alertEnabled,
+                                    stockThreshold: alertThreshold,
+                                    expiryEnabled: !!expiryDate,
+                                    expiryDays: 30
+                                },
+                                isPinned: isPinned,
+                                createdAt: new Date().toISOString(),
+                                updatedAt: new Date().toISOString()
+                            };
+                            productMap.set(productKey, product);
+                        }
+                        
+                        // 在庫を追加
+                        product.stocks.push({
+                            id: 'STK_' + Date.now() + '_' + Math.random(),
+                            quantity: quantity,
+                            purchaseDate: purchaseDate,
+                            price: price,
+                            store: store,
+                            expiryDate: expiryDate,
+                            notes: notes
+                        });
+                    });
+                    
+                    // 商品を在庫に追加
+                    productMap.forEach(product => {
+                        updatePriceStats(product);
+                        inventory.push(product);
+                    });
+                    
+                    saveData();
+                    renderInventory();
+                    updateAlerts();
+                    showNotification(`✅ ${productMap.size}商品をインポートしました`);
+                } catch (err) {
+                    console.error('インポートエラー:', err);
+                    alert('CSVの読み込みに失敗しました: ' + err.message);
+                }
+            });
+            input.click();
+        }
+
+        // ========================================
+        // ユーティリティ関数
+        // ========================================
+
+        function downloadCSV(csvContent, filename) {
+            const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function createFileInput(accept, callback) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = accept;
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = (event) => callback(event.target.result);
+                reader.readAsText(file, 'UTF-8');
+            };
+            return input;
+        }
+
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                const nextChar = line[i + 1];
+                
+                if (char === '"') {
+                    if (inQuotes && nextChar === '"') {
+                        current += '"';
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current);
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current);
+            
+            return result.map(v => v.replace(/^"|"$/g, ''));
+        }
+
+        function escapeCSV(str) {
+            if (!str) return '""';
+            str = String(str);
+            if (str.includes('"') || str.includes(',') || str.includes('\n')) {
+                return '"' + str.replace(/"/g, '""') + '"';
+            }
+            return '"' + str + '"';
+        }
+
+        function getDateString() {
+            return new Date().toISOString().split('T')[0];
+        }
+
+        function showNotification(message, type = 'success') {
+            const notification = document.createElement('div');
+            
+            const colors = {
+                success: 'var(--success)',
+                warning: 'var(--warning)',
+                error: 'var(--danger)',
+                info: 'var(--primary)'
+            };
+            
+            notification.style.cssText = `
+                position: fixed;
+                top: 80px;
+                right: 20px;
+                background: ${colors[type] || colors.success};
+                color: white;
+                padding: 15px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px var(--shadow);
+                z-index: 2000;
+                animation: slideDown 0.3s ease;
+            `;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.animation = 'fadeOut 0.3s ease';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
+        // カテゴリー管理
+        function openCategoryManager() {
+            closeModal('settingsModal');
+            renderCategoryManager();
+            openModal('categoryManagerModal');
+        }
+
+        function renderCategoryManager() {
+            const list = document.getElementById('categoryManagerList');
+            let html = `
+                <div style="margin-bottom: 20px; text-align: center;">
+                    <button class="btn btn-secondary" id="toggleReorderBtn" onclick="toggleReorderMode()" style="width: 100%;">
+                        🔄 順番を入れ替える
+                    </button>
+                </div>
+                <div id="categoryListContent">
+            `;
+
+            categories.large.forEach((large, largeIndex) => {
+                const largeId = `large_${large.replace(/\s/g, '_')}`;
+                const mediumCount = categories.medium[large] ? categories.medium[large].length : 0;
+                
+                html += `
+                    <div class="category-item" data-level="large" data-index="${largeIndex}" draggable="false" style="background: var(--bg-main); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                                <span class="drag-handle" style="display: none; cursor: move; font-size: 20px; color: var(--text-secondary);">⋮⋮</span>
+                                <div style="flex: 1; cursor: pointer;" onclick="toggleCategorySection('${largeId}')">
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <span id="${largeId}_icon" style="font-size: 18px; transition: transform 0.3s ease;">▶</span>
+                                        <strong style="font-size: 16px;">${large}</strong>
+                                        <span style="color: var(--text-secondary); font-size: 13px;">(${mediumCount})</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 5px;" class="edit-buttons">
+                                <button class="btn btn-secondary" onclick="event.stopPropagation(); editLargeCategory('${large}')" style="padding: 6px 10px; font-size: 13px; min-width: 36px;">
+                                    ✏️
+                                </button>
+                                <button class="btn btn-danger" onclick="event.stopPropagation(); deleteLargeCategory('${large}')" style="padding: 6px 10px; font-size: 13px; min-width: 36px;">
+                                    🗑️
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 中カテゴリーセクション -->
+                        <div id="${largeId}" style="display: none; margin-top: 15px; padding-left: 20px;">
+                            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                                <input type="text" class="form-input" id="newMedium_${large}" placeholder="中カテゴリーを追加" style="flex: 1;">
+                                <button class="btn btn-primary" onclick="addMediumCategory('${large}')" style="padding: 8px 16px; font-size: 13px; white-space: nowrap;">追加</button>
+                            </div>
+
+                            ${categories.medium[large] && categories.medium[large].length > 0 ? 
+                                categories.medium[large].map((medium, mediumIndex) => {
+                                    const mediumId = `medium_${large.replace(/\s/g, '_')}_${medium.replace(/\s/g, '_')}`;
+                                    const smallCount = categories.small[medium] ? categories.small[medium].length : 0;
+                                    
+                                    return `
+                                        <div class="category-item" data-level="medium" data-index="${mediumIndex}" data-parent="${large}" draggable="false" style="background: white; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+                                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                                <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
+                                                    <span class="drag-handle" style="display: none; cursor: move; font-size: 18px; color: var(--text-secondary);">⋮⋮</span>
+                                                    <div style="flex: 1; cursor: pointer;" onclick="toggleCategorySection('${mediumId}')">
+                                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                                            <span id="${mediumId}_icon" style="font-size: 16px; transition: transform 0.3s ease;">▶</span>
+                                                            <strong style="font-size: 14px;">${medium}</strong>
+                                                            <span style="color: var(--text-secondary); font-size: 12px;">(${smallCount})</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div style="display: flex; gap: 5px;" class="edit-buttons">
+                                                    <button class="btn btn-secondary" onclick="event.stopPropagation(); editMediumCategory('${large}', '${medium}')" style="padding: 4px 8px; font-size: 12px; min-width: 32px;">
+                                                        ✏️
+                                                    </button>
+                                                    <button class="btn btn-danger" onclick="event.stopPropagation(); deleteMediumCategory('${large}', '${medium}')" style="padding: 4px 8px; font-size: 12px; min-width: 32px;">
+                                                        🗑️
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <!-- 小カテゴリーセクション -->
+                                            <div id="${mediumId}" style="display: none; margin-top: 10px; padding-left: 20px;">
+                                                <div style="display: flex; gap: 10px; margin-bottom: 8px;">
+                                                    <input type="text" class="form-input" id="newSmall_${medium}" placeholder="小カテゴリーを追加" style="flex: 1; font-size: 13px;">
+                                                    <button class="btn btn-primary" onclick="addSmallCategory('${medium}')" style="padding: 6px 12px; font-size: 12px; white-space: nowrap;">追加</button>
+                                                </div>
+
+                                                ${categories.small[medium] && categories.small[medium].length > 0 ? 
+                                                    categories.small[medium].map((small, smallIndex) => `
+                                                        <div class="category-item" data-level="small" data-index="${smallIndex}" data-parent="${medium}" draggable="false" style="background: var(--bg-main); padding: 6px 10px; border-radius: 4px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
+                                                            <div style="display: flex; align-items: center; gap: 6px; flex: 1;">
+                                                                <span class="drag-handle" style="display: none; cursor: move; font-size: 16px; color: var(--text-secondary);">⋮⋮</span>
+                                                                <span style="font-size: 13px;">${small}</span>
+                                                            </div>
+                                                            <div style="display: flex; gap: 5px;" class="edit-buttons">
+                                                                <button class="btn btn-secondary" onclick="editSmallCategory('${medium}', '${small}')" style="padding: 3px 6px; font-size: 11px; min-width: 28px;">
+                                                                    ✏️
+                                                                </button>
+                                                                <button class="btn btn-danger" onclick="deleteSmallCategory('${medium}', '${small}')" style="padding: 3px 6px; font-size: 11px; min-width: 28px;">
+                                                                    🗑️
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    `).join('') 
+                                                    : '<div style="color: var(--text-secondary); font-size: 12px;">小カテゴリーがありません</div>'
+                                                }
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('') 
+                                : '<div style="color: var(--text-secondary); font-size: 13px;">中カテゴリーがありません</div>'
+                            }
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            list.innerHTML = html;
+        }
+
+        //折りたたみ機能の関数
+        function toggleCategorySection(sectionId) {
+            const section = document.getElementById(sectionId);
+            const icon = document.getElementById(`${sectionId}_icon`);
+            
+            if (section.style.display === 'none' || section.style.display === '') {
+                section.style.display = 'block';
+                icon.style.transform = 'rotate(90deg)';
+                icon.textContent = '▼';
+            } else {
+                section.style.display = 'none';
+                icon.style.transform = 'rotate(0deg)';
+                icon.textContent = '▶';
+            }
+        }
+
+        function addLargeCategory() {
+            const input = document.getElementById('newLargeCategory');
+            const name = input.value.trim();
+            
+            if (!name) {
+                alert('カテゴリー名を入力してください');
+                return;
+            }
+            
+            if (categories.large.includes(name)) {
+                alert('このカテゴリーは既に存在します');
+                return;
+            }
+            
+            categories.large.push(name);
+            categories.medium[name] = [];
+            
+            // 全プロファイルに追加
+            profiles.forEach(profile => {
+                if (!profile.visibleCategories.large.includes(name)) {
+                    profile.visibleCategories.large.push(name);
+                    profile.visibleCategories.medium[name] = [];
+                }
+            });
+            
+            saveData();
+            updateCategorySelects();
+            updateFilterSelects();
+            renderCategoryManager();
+            input.value = '';
+            showNotification('✅ 大カテゴリーを追加しました');
+        }
+
+        function addMediumCategory(large) {
+            const input = document.getElementById(`newMedium_${large}`);
+            const name = input.value.trim();
+            
+            if (!name) {
+                alert('カテゴリー名を入力してください');
+                return;
+            }
+            
+            if (!categories.medium[large]) {
+                categories.medium[large] = [];
+            }
+            
+            if (categories.medium[large].includes(name)) {
+                alert('このカテゴリーは既に存在します');
+                return;
+            }
+            
+            categories.medium[large].push(name);
+            categories.small[name] = [];
+            
+            // 全プロファイルに追加
+            profiles.forEach(profile => {
+                if (profile.visibleCategories.large.includes(large)) {
+                    if (!profile.visibleCategories.medium[large]) {
+                        profile.visibleCategories.medium[large] = [];
+                    }
+                    if (!profile.visibleCategories.medium[large].includes(name)) {
+                        profile.visibleCategories.medium[large].push(name);
+                        profile.visibleCategories.small[name] = [];
+                    }
+                }
+            });
+            
+            saveData();
+            updateCategorySelects();
+            updateFilterSelects();
+            renderCategoryManager();
+            input.value = '';
+            showNotification('✅ 中カテゴリーを追加しました');
+        }
+
+        function addSmallCategory(medium) {
+            const input = document.getElementById(`newSmall_${medium}`);
+            const name = input.value.trim();
+            
+            if (!name) {
+                alert('カテゴリー名を入力してください');
+                return;
+            }
+            
+            if (!categories.small[medium]) {
+                categories.small[medium] = [];
+            }
+            
+            if (categories.small[medium].includes(name)) {
+                alert('このカテゴリーは既に存在します');
+                return;
+            }
+            
+            categories.small[medium].push(name);
+            
+            // 全プロファイルに追加
+            profiles.forEach(profile => {
+                if (profile.visibleCategories.small[medium]) {
+                    if (!profile.visibleCategories.small[medium].includes(name)) {
+                        profile.visibleCategories.small[medium].push(name);
+                    }
+                }
+            });
+            
+            saveData();
+            updateCategorySelects();
+            updateFilterSelects();
+            renderCategoryManager();
+            input.value = '';
+            showNotification('✅ 小カテゴリーを追加しました');
+        }
+
+        function deleteLargeCategory(large) {
+            // このカテゴリーを使用している商品がないか確認
+            const hasProducts = inventory.some(p => p.category.large === large);
+            
+            if (hasProducts) {
+                alert('このカテゴリーを使用している商品があるため削除できません');
+                return;
+            }
+            
+            if (!confirm(`「${large}」とその配下のすべてのカテゴリーを削除しますか？`)) {
+                return;
+            }
+            
+            // 中カテゴリーと小カテゴリーも削除
+            if (categories.medium[large]) {
+                categories.medium[large].forEach(medium => {
+                    delete categories.small[medium];
+                });
+                delete categories.medium[large];
+            }
+            
+            // 大カテゴリーを削除
+            categories.large = categories.large.filter(c => c !== large);
+            
+            // 全プロファイルから削除
+            profiles.forEach(profile => {
+                profile.visibleCategories.large = profile.visibleCategories.large.filter(c => c !== large);
+                if (profile.visibleCategories.medium[large]) {
+                    profile.visibleCategories.medium[large].forEach(medium => {
+                        delete profile.visibleCategories.small[medium];
+                    });
+                    delete profile.visibleCategories.medium[large];
+                }
+            });
+            
+            saveData();
+            updateCategorySelects();
+            updateFilterSelects();
+            renderCategoryManager();
+            showNotification('✅ 大カテゴリーを削除しました');
+        }
+
+        function deleteMediumCategory(large, medium) {
+            // このカテゴリーを使用している商品がないか確認
+            const hasProducts = inventory.some(p => p.category.medium === medium);
+            
+            if (hasProducts) {
+                alert('このカテゴリーを使用している商品があるため削除できません');
+                return;
+            }
+            
+            if (!confirm(`「${medium}」とその配下のすべてのカテゴリーを削除しますか？`)) {
+                return;
+            }
+            
+            // 小カテゴリーを削除
+            delete categories.small[medium];
+            
+            // 中カテゴリーを削除
+            if (categories.medium[large]) {
+                categories.medium[large] = categories.medium[large].filter(c => c !== medium);
+            }
+            
+            // 全プロファイルから削除
+            profiles.forEach(profile => {
+                if (profile.visibleCategories.medium[large]) {
+                    profile.visibleCategories.medium[large] = profile.visibleCategories.medium[large].filter(c => c !== medium);
+                }
+                delete profile.visibleCategories.small[medium];
+            });
+            
+            saveData();
+            updateCategorySelects();
+            updateFilterSelects();
+            renderCategoryManager();
+            showNotification('✅ 中カテゴリーを削除しました');
+        }
+
+        function deleteSmallCategory(medium, small) {
+            // このカテゴリーを使用している商品がないか確認
+            const hasProducts = inventory.some(p => p.category.small === small);
+            
+            if (hasProducts) {
+                alert('このカテゴリーを使用している商品があるため削除できません');
+                return;
+            }
+            
+            if (!confirm(`「${small}」を削除しますか？`)) {
+                return;
+            }
+            
+            // 小カテゴリーを削除
+            if (categories.small[medium]) {
+                categories.small[medium] = categories.small[medium].filter(c => c !== small);
+            }
+            
+            // 全プロファイルから削除
+            profiles.forEach(profile => {
+                if (profile.visibleCategories.small[medium]) {
+                    profile.visibleCategories.small[medium] = profile.visibleCategories.small[medium].filter(c => c !== small);
+                }
+            });
+            
+            saveData();
+            updateCategorySelects();
+            updateFilterSelects();
+            renderCategoryManager();
+            showNotification('✅ 小カテゴリーを削除しました');
+        }
+
+        // カテゴリー名編集機能
+        function editLargeCategory(oldName) {
+            const newName = prompt('新しいカテゴリー名を入力してください', oldName);
+            
+            if (!newName || newName === oldName) {
+                return;
+            }
+            
+            if (!newName.trim()) {
+                alert('カテゴリー名を入力してください');
+                return;
+            }
+            
+            if (categories.large.includes(newName)) {
+                alert('このカテゴリー名は既に存在します');
+                return;
+            }
+            
+            // 商品のカテゴリー名を更新
+            inventory.forEach(product => {
+                if (product.category.large === oldName) {
+                    product.category.large = newName;
+                }
+            });
+            
+            // カテゴリー構造を更新
+            const index = categories.large.indexOf(oldName);
+            categories.large[index] = newName;
+            
+            if (categories.medium[oldName]) {
+                categories.medium[newName] = categories.medium[oldName];
+                delete categories.medium[oldName];
+            }
+            
+            // 全プロファイルを更新
+            profiles.forEach(profile => {
+                const idx = profile.visibleCategories.large.indexOf(oldName);
+                if (idx !== -1) {
+                    profile.visibleCategories.large[idx] = newName;
+                }
+                
+                if (profile.visibleCategories.medium[oldName]) {
+                    profile.visibleCategories.medium[newName] = profile.visibleCategories.medium[oldName];
+                    delete profile.visibleCategories.medium[oldName];
+                }
+            });
+            
+            saveData();
+            updateCategorySelects();
+            updateFilterSelects();
+            renderCategoryManager();
+            renderInventory();
+            showNotification('✅ カテゴリー名を変更しました');
+        }
+
+        function editMediumCategory(large, oldName) {
+            const newName = prompt('新しいカテゴリー名を入力してください', oldName);
+            
+            if (!newName || newName === oldName) {
+                return;
+            }
+            
+            if (!newName.trim()) {
+                alert('カテゴリー名を入力してください');
+                return;
+            }
+            
+            if (categories.medium[large] && categories.medium[large].includes(newName)) {
+                alert('このカテゴリー名は既に存在します');
+                return;
+            }
+            
+            // 商品のカテゴリー名を更新
+            inventory.forEach(product => {
+                if (product.category.medium === oldName) {
+                    product.category.medium = newName;
+                }
+            });
+            
+            // カテゴリー構造を更新
+            if (categories.medium[large]) {
+                const index = categories.medium[large].indexOf(oldName);
+                categories.medium[large][index] = newName;
+            }
+            
+            if (categories.small[oldName]) {
+                categories.small[newName] = categories.small[oldName];
+                delete categories.small[oldName];
+            }
+            
+            // 全プロファイルを更新
+            profiles.forEach(profile => {
+                if (profile.visibleCategories.medium[large]) {
+                    const idx = profile.visibleCategories.medium[large].indexOf(oldName);
+                    if (idx !== -1) {
+                        profile.visibleCategories.medium[large][idx] = newName;
+                    }
+                }
+                
+                if (profile.visibleCategories.small[oldName]) {
+                    profile.visibleCategories.small[newName] = profile.visibleCategories.small[oldName];
+                    delete profile.visibleCategories.small[oldName];
+                }
+            });
+            
+            saveData();
+            updateCategorySelects();
+            updateFilterSelects();
+            renderCategoryManager();
+            renderInventory();
+            showNotification('✅ カテゴリー名を変更しました');
+        }
+
+        function editSmallCategory(medium, oldName) {
+            const newName = prompt('新しいカテゴリー名を入力してください', oldName);
+            
+            if (!newName || newName === oldName) {
+                return;
+            }
+            
+            if (!newName.trim()) {
+                alert('カテゴリー名を入力してください');
+                return;
+            }
+            
+            if (categories.small[medium] && categories.small[medium].includes(newName)) {
+                alert('このカテゴリー名は既に存在します');
+                return;
+            }
+            
+            // 商品のカテゴリー名を更新
+            inventory.forEach(product => {
+                if (product.category.small === oldName) {
+                    product.category.small = newName;
+                }
+            });
+            
+            // カテゴリー構造を更新
+            if (categories.small[medium]) {
+                const index = categories.small[medium].indexOf(oldName);
+                categories.small[medium][index] = newName;
+            }
+            
+            // 全プロファイルを更新
+            profiles.forEach(profile => {
+                if (profile.visibleCategories.small[medium]) {
+                    const idx = profile.visibleCategories.small[medium].indexOf(oldName);
+                    if (idx !== -1) {
+                        profile.visibleCategories.small[medium][idx] = newName;
+                    }
+                }
+            });
+            
+            saveData();
+            updateCategorySelects();
+            updateFilterSelects();
+            renderCategoryManager();
+            renderInventory();
+            showNotification('✅ カテゴリー名を変更しました');
+        }
+
+        function shouldShowQuantityMemo(product) {
+            return quantityMemoCategories.includes(product.category.large) ||
+                quantityMemoCategories.includes(product.category.medium) ||
+                quantityMemoCategories.includes(product.category.small);
+        }
+
+        function truncateText(text, maxLength) {
+            if (!text) return '';
+            if (text.length <= maxLength) return text;
+            return text.substring(0, maxLength) + '...';
+        }
+
+        function getQuantityMemoDisplay(product, maxLength) {
+            if (!shouldShowQuantityMemo(product)) return '';
+            if (product.stocks.length === 0) return '';
+            
+            const latestStock = product.stocks[product.stocks.length - 1];
+            if (!latestStock.notes) return '';
+            
+            const truncated = truncateText(latestStock.notes, maxLength);
+            return ` (${truncated})`;
+        }
+
+        function openQuantityMemoSettings() {
+            closeModal('settingsModal');
+            
+            const modalHtml = `
+                <div class="modal show" id="quantityMemoModal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2>📝 数量メモ表示設定</h2>
+                            <button class="close-btn" onclick="closeModal('quantityMemoModal')">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 14px;">
+                                選択したカテゴリーの商品では、最新在庫のメモが数量の横に表示されます
+                            </p>
+                            
+                            <div style="max-height: 400px; overflow-y: auto;">
+                                ${categories.large.map(large => {
+                                    const isChecked = quantityMemoCategories.includes(large);
+                                    return `
+                                        <div style="margin-bottom: 15px; padding: 12px; background: var(--bg-main); border-radius: 8px;">
+                                            <div class="checkbox-group" style="margin: 0;">
+                                                <input type="checkbox" id="qmemo_large_${large}" ${isChecked ? 'checked' : ''} onchange="toggleQuantityMemoCategory('${large}', 'large')">
+                                                <label for="qmemo_large_${large}" style="font-weight: 500;">${large}</label>
+                                            </div>
+                                            
+                                            ${categories.medium[large] ? categories.medium[large].map(medium => {
+                                                const isMediumChecked = quantityMemoCategories.includes(medium);
+                                                return `
+                                                    <div style="margin-left: 30px; margin-top: 8px;">
+                                                        <div class="checkbox-group" style="margin: 0;">
+                                                            <input type="checkbox" id="qmemo_medium_${medium}" ${isMediumChecked ? 'checked' : ''} onchange="toggleQuantityMemoCategory('${medium}', 'medium')">
+                                                            <label for="qmemo_medium_${medium}" style="font-size: 14px;">${medium}</label>
+                                                        </div>
+                                                        
+                                                        ${categories.small[medium] ? categories.small[medium].map(small => {
+                                                            const isSmallChecked = quantityMemoCategories.includes(small);
+                                                            return `
+                                                                <div style="margin-left: 30px; margin-top: 6px;">
+                                                                    <div class="checkbox-group" style="margin: 0;">
+                                                                        <input type="checkbox" id="qmemo_small_${small}" ${isSmallChecked ? 'checked' : ''} onchange="toggleQuantityMemoCategory('${small}', 'small')">
+                                                                        <label for="qmemo_small_${small}" style="font-size: 13px;">${small}</label>
+                                                                    </div>
+                                                                </div>
+                                                            `;
+                                                        }).join('') : ''}
+                                                    </div>
+                                                `;
+                                            }).join('') : ''}
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                            
+                            <button class="btn btn-primary" onclick="closeQuantityMemoSettings()" style="width: 100%; margin-top: 20px;">
+                                保存して閉じる
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        function toggleQuantityMemoCategory(category, level) {
+            const index = quantityMemoCategories.indexOf(category);
+            
+            if (index === -1) {
+                quantityMemoCategories.push(category);
+            } else {
+                quantityMemoCategories.splice(index, 1);
+            }
+            
+            saveData();
+        }
+
+        function closeQuantityMemoSettings() {
+            const modal = document.getElementById('quantityMemoModal');
+            if (modal) {
+                modal.remove();
+            }
+            renderInventory();
+            showNotification('✅ 数量メモ表示設定を保存しました');
+        }
+
+        // カテゴリー順序変更機能（ドラッグ&ドロップ対応）
+        let isReorderMode = false;
+        let draggedElement = null;
+        let draggedLevel = null;
+        let draggedIndex = null;
+        let draggedParent = null;
+
+        function toggleReorderMode() {
+            isReorderMode = !isReorderMode;
+            const btn = document.getElementById('toggleReorderBtn');
+            const handles = document.querySelectorAll('.drag-handle');
+            const editButtons = document.querySelectorAll('.edit-buttons');
+            const categoryItems = document.querySelectorAll('.category-item');
+            
+            if (isReorderMode) {
+                btn.textContent = '✅ 入れ替え完了';
+                btn.classList.remove('btn-secondary');
+                btn.classList.add('btn-primary');
+                
+                // ドラッグハンドルを表示、編集ボタンを非表示
+                handles.forEach(h => h.style.display = 'inline');
+                editButtons.forEach(b => b.style.display = 'none');
+                
+                // ドラッグ可能に設定
+                categoryItems.forEach(item => {
+                    item.setAttribute('draggable', 'true');
+                    item.style.cursor = 'move';
+                    
+                    item.addEventListener('dragstart', handleDragStart);
+                    item.addEventListener('dragend', handleDragEnd);
+                });
+                
+                // dragover と drop は categoryManagerList にまとめて listening で受け付ける
+                const managerList = document.getElementById('categoryManagerList');
+                managerList.addEventListener('dragover', handleDragOver);
+                managerList.addEventListener('drop', handleDrop);
+            } else {
+                btn.textContent = '🔄 順番を入れ替える';
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-secondary');
+                
+                // ドラッグハンドルを非表示、編集ボタンを表示
+                handles.forEach(h => h.style.display = 'none');
+                editButtons.forEach(b => b.style.display = 'flex');
+                
+                // ドラッグ不可に設定
+                categoryItems.forEach(item => {
+                    item.setAttribute('draggable', 'false');
+                    item.style.cursor = 'default';
+                    
+                    item.removeEventListener('dragstart', handleDragStart);
+                    item.removeEventListener('dragend', handleDragEnd);
+                });
+
+                // categoryManagerList からも削除
+                const managerList = document.getElementById('categoryManagerList');
+                managerList.removeEventListener('dragover', handleDragOver);
+                managerList.removeEventListener('drop', handleDrop);
+            }
+        }
+
+        function handleDragStart(e) {
+            // ネストされた子のdragstartが親に伝わるのを防ぐ
+            e.stopPropagation();
+
+            draggedElement = e.currentTarget;
+            draggedLevel = draggedElement.getAttribute('data-level');
+            draggedIndex = parseInt(draggedElement.getAttribute('data-index'));
+            draggedParent = draggedElement.getAttribute('data-parent');
+            
+            e.currentTarget.style.opacity = '0.5';
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const targetElement = e.target.closest('.category-item');
+            
+            // まず全てのハイライトをクリア
+            document.querySelectorAll('.category-item').forEach(item => {
+                item.style.outline = '';
+                item.style.outlineOffset = '';
+            });
+
+            if (!targetElement) return;
+            
+            const targetLevel = targetElement.getAttribute('data-level');
+            const targetParent = targetElement.getAttribute('data-parent');
+            
+            if (draggedLevel === targetLevel && draggedParent === targetParent && targetElement !== draggedElement) {
+                e.dataTransfer.dropEffect = 'move';
+                targetElement.style.outline = '3px solid var(--primary)';
+                targetElement.style.outlineOffset = '-3px';
+            }
+        }
+
+function handleDrop(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (!draggedElement) return;
+            
+            // すべてのハイライトをクリア
+            document.querySelectorAll('.category-item').forEach(item => {
+                item.style.outline = '';
+                item.style.outlineOffset = '';
+            });
+            
+            const targetElement = e.target.closest('.category-item');
+            if (!targetElement) return;
+            
+            const targetLevel = targetElement.getAttribute('data-level');
+            const targetIndex = parseInt(targetElement.getAttribute('data-index'));
+            const targetParent = targetElement.getAttribute('data-parent');
+            
+            if (draggedLevel === targetLevel && draggedParent === targetParent && draggedIndex !== targetIndex) {
+                // 現在の展開状態を記憶する
+                const openSections = [];
+                document.querySelectorAll('[id^="large_"], [id^="medium_"]').forEach(section => {
+                    if (section.style.display === 'block') {
+                        openSections.push(section.id);
+                    }
+                });
+
+                if (draggedLevel === 'large') {
+                    const item = categories.large.splice(draggedIndex, 1)[0];
+                    categories.large.splice(targetIndex, 0, item);
+                } else if (draggedLevel === 'medium') {
+                    const item = categories.medium[draggedParent].splice(draggedIndex, 1)[0];
+                    categories.medium[draggedParent].splice(targetIndex, 0, item);
+                } else if (draggedLevel === 'small') {
+                    const item = categories.small[draggedParent].splice(draggedIndex, 1)[0];
+                    categories.small[draggedParent].splice(targetIndex, 0, item);
+                }
+                
+                saveData();
+                updateCategorySelects();
+                updateFilterSelects();
+                
+                isReorderMode = false;
+                renderCategoryManager();
+
+                // 記憶した展開状態を復元する
+                console.log('開いているセクション:', openSections);
+                openSections.forEach(sectionId => {
+                    const section = document.getElementById(sectionId);
+                    const icon = document.getElementById(`${sectionId}_icon`);
+                    console.log(sectionId, 'section:', section, 'icon:', icon);
+                    if (section && icon) {
+                        section.style.display = 'block';
+                        icon.style.transform = 'rotate(90deg)';
+                        icon.textContent = '▼';
+                    }
+                });
+
+                setTimeout(() => {
+                    toggleReorderMode();
+                }, 50);
+            }
+        }
+
+        function handleDragEnd(e) {
+            e.currentTarget.style.opacity = '1';
+            
+            document.querySelectorAll('.category-item').forEach(item => {
+                item.style.outline = '';
+                item.style.outlineOffset = '';
+            });
+        }
+
+        // カテゴリー順序変更機能（↑↓ ボタン方式・現在使用していない)
+        function moveCategoryUp(level, index, parent) {
+            if (index === 0) return;
+            
+            if (level === 'large') {
+                [categories.large[index], categories.large[index - 1]] = 
+                [categories.large[index - 1], categories.large[index]];
+            } else if (level === 'medium') {
+                [categories.medium[parent][index], categories.medium[parent][index - 1]] = 
+                [categories.medium[parent][index - 1], categories.medium[parent][index]];
+            } else if (level === 'small') {
+                [categories.small[parent][index], categories.small[parent][index - 1]] = 
+                [categories.small[parent][index - 1], categories.small[parent][index]];
+            }
+            
+            saveData();
+            updateCategorySelects();
+            updateFilterSelects();
+            renderCategoryManager();
+            showNotification('✅ カテゴリーの順序を変更しました');
+        }
+        //（↑↓ ボタン方式・現在使用していない)
+        function moveCategoryDown(level, index, parent) {
+            if (level === 'large') {
+                if (index === categories.large.length - 1) return;
+                [categories.large[index], categories.large[index + 1]] = 
+                [categories.large[index + 1], categories.large[index]];
+            } else if (level === 'medium') {
+                if (index === categories.medium[parent].length - 1) return;
+                [categories.medium[parent][index], categories.medium[parent][index + 1]] = 
+                [categories.medium[parent][index + 1], categories.medium[parent][index]];
+            } else if (level === 'small') {
+                if (index === categories.small[parent].length - 1) return;
+                [categories.small[parent][index], categories.small[parent][index + 1]] = 
+                [categories.small[parent][index + 1], categories.small[parent][index]];
+            }
+            
+            saveData();
+            updateCategorySelects();
+            updateFilterSelects();
+            renderCategoryManager();
+            showNotification('✅ カテゴリーの順序を変更しました');
+        }
+
+        // ========================================
+        // Firebase リアルタイム同期
+        // ========================================
+
+        // 同期ステータス更新
+        function updateSyncStatus(status) {
+            const statusElement = document.getElementById('syncStatus');
+            if (!statusElement) return;
+            
+            const statusConfig = {
+                synced: { icon: '✅', text: '同期済み', class: 'synced' },
+                syncing: { icon: '🔄', text: '同期中...', class: 'syncing' },
+                loading: { icon: '⏳', text: '読込中...', class: 'syncing' },
+                error: { icon: '❌', text: 'オフライン', class: 'error' }
+            };
+            
+            const config = statusConfig[status] || statusConfig.synced;
+            statusElement.innerHTML = `${config.icon} ${config.text}`;
+            statusElement.className = 'sync-status ' + config.class;
+        }
+
+        // リアルタイム同期リスナー
+        function setupRealtimeListener() {
+            db.collection('inventory').doc(userId)
+                .onSnapshot((doc) => {
+                    if (doc.exists && !doc.metadata.hasPendingWrites) {
+                        const data = doc.data();
+                        
+                        // 他のデバイスからの更新を検知
+                        const currentData = JSON.stringify({
+                            inventory,
+                            categories,
+                            locations,
+                            stores,
+                            profiles,
+                            currentProfile,
+                            quantityMemoCategories
+                        });
+                        
+                        const newData = JSON.stringify({
+                            inventory: data.inventory || [],
+                            categories: data.categories || categories,
+                            locations: data.locations || locations,
+                            stores: data.stores || [],
+                            profiles: data.profiles || [],
+                            currentProfile: data.currentProfile || null,
+                            quantityMemoCategories: data.quantityMemoCategories || quantityMemoCategories
+                        });
+                        
+                        if (currentData !== newData) {
+                            inventory = data.inventory || [];
+                            categories = data.categories || categories;
+                            locations = data.locations || locations;
+                            stores = data.stores || [];
+                            profiles = data.profiles || [];
+                            currentProfile = data.currentProfile || null;
+                            quantityMemoCategories = data.quantityMemoCategories || quantityMemoCategories;
+                            
+                            renderInventory();
+                            updateAlerts();
+                            updateCategorySelects();
+                            updateFilterSelects();
+                            updateProfileDisplay();
+                            
+                            showNotification('🔄 他のデバイスから更新されました', 'info');
+                            console.log('🔄 リアルタイム同期: データを更新しました');
+                        }
+                        
+                        updateSyncStatus('synced');
+                    }
+                }, (error) => {
+                    console.error('❌ リアルタイム同期エラー:', error);
+                    updateSyncStatus('error');
+                });
+        }
+
+        setInterval(updateAlerts, 60000);
+    </script>
+    <!-- Service Worker登録 -->
+    <script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./service-worker.js')
+                .then((registration) => {
+                    console.log('✅ Service Worker登録成功:', registration.scope);
+                })
+                .catch((error) => {
+                    console.log('❌ Service Worker登録失敗:', error);
+                });
+        });
+    }
+
+    // インストールプロンプト
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        console.log('💡 アプリをインストール可能です');
+        
+        // インストールボタンを表示する場合は、ここで処理
+        // 例: showInstallButton();
+    });
+
+    window.addEventListener('appinstalled', () => {
+        console.log('✅ アプリがインストールされました');
+        deferredPrompt = null;
+    });
+    </script>
+</body>
+</html>
